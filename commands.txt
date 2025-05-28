@@ -1,0 +1,45 @@
+
+============ DRONE1 ================
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /hercules_node/Drone1/front_center_Scene/image \
+       --expected_msgs 4125
+    
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /hercules_node/Drone1/front_center_DepthPerspective/image \
+       --expected_msgs 4125
+
+============ HUSKY1 ================
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /hercules_node/Husky1/front_center_Scene/image \
+       --expected_msgs 4238
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /hercules_node/Husky1/front_center_DepthPerspective/image \
+       --expected_msgs 4238
+
+============ TF ====================
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /tf \
+       --robot_name Husky1 \
+       --expected_msgs 17059
+
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /tf \
+       --robot_name Drone1 \
+       --expected_msgs 17059
