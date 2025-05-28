@@ -1,0 +1,3 @@
+[submodule "external_msgs/HERCULES-Cosys-AirSim"]
+	path = external_msgs/HERCULES-Cosys-AirSim
+	url = https://github.com/ssaigarimella/HERCULES-Cosys-AirSim.git

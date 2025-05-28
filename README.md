@@ -6,12 +6,16 @@ Currently, this repository is in active development and functionality isn't guar
 
 ## Installation
 
-You will need Python 3 to run this code. It has been used with Python 3.10, but may work with other version. Run the following command to install the repository:
+You will need Python 3 to run this code. It has been used with Python 3.10, but may work with other version. Run the following commands to install the repository:
 ```
+git submodule init
+git submodule update
 pip install .
 ```
 
 ## Example Use
+
+See use cases for this repository below. For more information on the command line arguments, use the `--help` argument with the `src/rosbag_manipulation/main.py` file.
 
 ### Downsampling
 
@@ -37,4 +41,13 @@ python src/rosbag_manipulation/main.py \
        --expected_msgs 17059
 ```
 
-For more information on the command line arguments, use the `--help` argument with the `src/rosbag_manipulation/main.py` file.
+### Crop
+A rosbag can be cropped to only include message written into the bag within a certain timeframe with this feature. Note that this doesn't take into account the timestamps inside the messages. An example command for this functionality is as follows:
+```
+python src/rosbag_manipulation/main.py \
+       crop /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV_only60 \
+       --external_msgs_path /home/dbutterfield3/Research/rosbag_manipulation/external_msgs \
+       --start_ts 1747048365.868941009 \
+       --end_ts 1747048425.868941009 \
+```

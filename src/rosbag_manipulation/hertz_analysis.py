@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from rosbags.rosbag2 import Writer, Reader
 from rosbags.typesys import Stores, get_typestore
+from rosbags.typesys.store import Typestore
 import tqdm
 
 def create_histogram(data: list, title: str, xlabel: str, ylabel: str, filename: str) -> None:
@@ -31,7 +32,7 @@ def create_histogram(data: list, title: str, xlabel: str, ylabel: str, filename:
         Path(filename).parent.mkdir(parents=True, exist_ok=True)
     plt.savefig(filename)
 
-def analyze_hertz(input_path: str, output_folder: str, topic: str, expected_msgs: int = None, robot_name: str = None) -> None:
+def analyze_hertz(input_path: str, output_folder: str, typestore: Typestore, topic: str, expected_msgs: int = None, robot_name: str = None) -> None:
     """
     Analyze the hertz of various topics in a ROS2 bag file. Will output
     histograms of the hertz between each pair of consecutive messages 
@@ -40,6 +41,7 @@ def analyze_hertz(input_path: str, output_folder: str, topic: str, expected_msgs
     Args:
         input_path (str): Path to the input ROS2 bag folder.
         output_folder (str): Location to save generated figures.
+        typestore (Typestore): Typestore instance to use for message types.
         topic (str): Topic to analyze.
         expected_msgs (int): The expected number of messages to find,
             for use with tqdm.
@@ -52,7 +54,6 @@ def analyze_hertz(input_path: str, output_folder: str, topic: str, expected_msgs
     input_path = Path(input_path)
 
     # Open the bag file for reading
-    typestore = get_typestore(Stores.ROS2_HUMBLE)
     with Reader(input_path) as reader:
         # Store timestamps
         topic_timestamps = []
