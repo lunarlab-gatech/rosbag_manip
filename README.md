@@ -13,6 +13,11 @@ pip install .
 
 ## Example Use
 
+### Downsampling
+
+TBD
+
+### Hertz Analysis
 In order to generate histograms with an analysis of the hertz rates for a specific topic, run a command similar to the following:
 ```
 python src/rosbag_manipulation/main.py \

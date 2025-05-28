@@ -43,3 +43,17 @@ python src/rosbag_manipulation/main.py \
        --topic /tf \
        --robot_name Drone1 \
        --expected_msgs 17059
+
+============ GT Odometry ====================
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /hercules_node/Husky1/odom_local \
+       --expected_msgs 42379
+
+python src/rosbag_manipulation/main.py \
+       hertz_analysis /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /home/dbutterfield3/Research/rosbag_manipulation/figures \
+       --topic /hercules_node/Drone1/odom_local \
+       --expected_msgs 41237
