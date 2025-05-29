@@ -2,7 +2,7 @@
 
 A set of tools for manipulation ROS2 rosbags in a deterministic manner. For example `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). Thus, I write this code to fill the void.
 
-Currently, this repository is in active development and functionality isn't guaranteed.
+**WARNING:** Currently, this repository is in active development and functionality isn't guaranteed to work. If you will depend on this repository for important tasks, perhaps write test cases for the corresponding functionality before deployment/use.
 
 ## Installation
 
@@ -19,7 +19,38 @@ See use cases for this repository below. For more information on the command lin
 
 ### Downsampling
 
-TBD
+This functionality allows downsampling the hertz rates of topics in the bag (for example, 35 Hz to 5 Hz). It additionally resizes images to half their width/height, resulting in an image with 1/4 of the data. See an example command below for this functionality:
+```
+python src/rosbag_manipulation/main.py \
+       downsample /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV \
+       /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV_downsampled \
+       --external_msgs_path /home/dbutterfield3/Research/rosbag_manipulation/external_msgs \
+       --topics /hercules_node/Husky1/odom_local \
+                /hercules_node/Husky2/odom_local \
+                /hercules_node/Drone1/odom_local \
+                /hercules_node/Drone2/odom_local \
+                /hercules_node/Husky1/front_center_Scene/image \
+                /hercules_node/Husky1/front_center_Scene/camera_info \
+                /hercules_node/Husky1/front_center_DepthPerspective/image \
+                /hercules_node/Husky1/front_center_DepthPerspective/camera_info \
+                /hercules_node/Husky2/front_center_Scene/image \
+                /hercules_node/Husky2/front_center_Scene/camera_info \
+                /hercules_node/Husky2/front_center_DepthPerspective/image \
+                /hercules_node/Husky2/front_center_DepthPerspective/camera_info \
+                /hercules_node/Drone1/front_center_Scene/image \
+                /hercules_node/Drone1/front_center_Scene/camera_info \
+                /hercules_node/Drone1/front_center_DepthPerspective/image \
+                /hercules_node/Drone1/front_center_DepthPerspective/camera_info \
+                /hercules_node/Drone2/front_center_Scene/image \
+                /hercules_node/Drone2/front_center_Scene/camera_info \
+                /hercules_node/Drone2/front_center_DepthPerspective/image \
+                /hercules_node/Drone2/front_center_DepthPerspective/camera_info \
+       --downsample_rates   1.0 1.0   1.0 1.0 \
+                          0.125 1.0 0.125 1.0 \
+                          0.125 1.0 0.125 1.0 \
+                          0.125 1.0 0.125 1.0 \
+                          0.125 1.0 0.125 1.0
+```
 
 ### Hertz Analysis
 In order to generate histograms with an analysis of the hertz rates for a specific topic, run a command similar to the following:

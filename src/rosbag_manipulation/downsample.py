@@ -3,34 +3,27 @@ import numpy as np
 from pathlib import Path
 from rosbags.rosbag2 import Writer, Reader
 from rosbags.typesys import Stores, get_typestore
+from rosbags.typesys.store import Typestore
 from collections import defaultdict
 import tqdm
 
-# Config
-CAMERA_HZ = 35
-TF_HZ = 400
-CAMERA_DOWNSAMPLE_RATIO = 1 #int(CAMERA_HZ / 3.5)
-TF_DOWNSAMPLE_RATIO = 1 #int(TF_HZ / 40)
-START_TS = 1747048365868941009 # nanoseconds
-MAX_DURATION = 60 # seconds
+def resize_image_msg(msg: object, scale: float = 0.5) -> object:
+    """
+    Resize sensor_msgs/Image message. Currently supports 'rgb8' and '32FC1' encodings.
+    
+    Args:
+        msg (object): The image message to resize.
+        scale (float): The scale factor to resize the image. Default is 0.5 (50%).
 
-CAMERA_TOPIC_SUFFIXES = [
-    'front_center_Scene',
-    'front_center_DepthPerspective',
-]
+    Returns:
+        object: The resized image message.
+    """
 
-MSG_TYPE_SUFFIXES = [
-    'image',
-    'camera_info',
-]
-
-ROBOT_NAMES = ['Husky1', 'Husky2', 'Drone1', 'Drone2']  # Replace with your actual robot names
-
-def resize_image_msg(msg, scale=0.5):
-    """Resize sensor_msgs/Image message, supporting 'rgb8' and '32FC1' encodings."""
+    # We retain original values, this isn't fully tested
     encoding = msg.encoding
-    is_bigendian = msg.is_bigendian  # Usually 0, but we retain original value
+    is_bigendian = msg.is_bigendian  
 
+    # Resize based on encoding
     resized, resized_bytes, step = None, None, None
     if encoding == 'rgb8':
         img_np = np.frombuffer(msg.data, dtype=np.uint8).reshape((msg.height, msg.width, 3))
@@ -56,26 +49,39 @@ def resize_image_msg(msg, scale=0.5):
     msg.is_bigendian = is_bigendian  # unchanged
     return msg
 
-def downsample_bag(input_bag_path, output_bag_path):
-    input_bag = Path(input_bag_path)
-    output_bag = Path(output_bag_path)
+def downsample_bag(input_path: str, output_path: str, typestore: Typestore, topics_to_write: list,
+                   downsample_rates: list):
+    """
+    Downsample a ROS2 bag file by downsampling the frequency of specified topics.
+    Additionally resize image topics to half their original size.
 
+    Args:
+        input_path (str): Path to the input ROS2 bag folder.
+        output_path (str): Path to the output ROS2 bag folder.
+        typestore (Typestore): Typestore instance to use for message types.
+        topics_to_write (list): List of topics to include in the downsampled bag.
+        downsample_rates (list): List of downsample rates corresponding to each topic in topics_to_write.
+    """
+
+    # Convert to pathlib paths
+    input_bag = Path(input_path)
+    output_bag = Path(output_path)
+
+    # Ensure we aren't overwriting an existing output bag
     if output_bag.exists():
         raise AssertionError("Delete Output Directory first!")
+    
+    # Calculate downsample ratios
+    for val in downsample_rates:
+        if val <= 0:
+            raise ValueError("Downsample rates must be greater than 0.")
+    downsample_ratios = dict(zip(topics_to_write, [1/x for x in downsample_rates]))
 
-    topics_to_write = []
-    for robot_name in ROBOT_NAMES:
-        for suffix in CAMERA_TOPIC_SUFFIXES:
-            for msg_type in MSG_TYPE_SUFFIXES:
-                topics_to_write.append(f'/hercules_node/{robot_name}/{suffix}/{msg_type}')
-    topics_to_write.append('/tf')
-    topics_to_write.append('/tf_static')
-
-    typestore = get_typestore(Stores.ROS2_HUMBLE)
-
+    # Open the bag
     with Reader(input_bag) as reader:
         connections = reader.connections
-
+        
+        # Create a writer with only the specified topics
         with Writer(output_bag, version=5) as writer:
             conn_map = {}
             for conn in connections:
@@ -89,50 +95,54 @@ def downsample_bag(input_bag_path, output_bag_path):
                         offered_qos_profiles=conn.ext.offered_qos_profiles
                     )
 
-            image_counters = defaultdict(int)
-            info_counters = defaultdict(int)
-            tf_counter = 0
-            static_tf_counter = 0
+            # Initialize counters for each topic
+            topic_counters = defaultdict(int)
+            for topic in topics_to_write:
+                topic_counters[topic] = 1
 
-            # setup tqdm 
-            pbar = tqdm.tqdm(total=4124, desc="Writing Images", unit="frames")
+            # Setup progress bars
+            pbarC = tqdm.tqdm(total=None, desc="Downsampling Requested Messages", unit=" messages")
+            pbarW = tqdm.tqdm(total=None, desc="Writing Messages", unit=" messages")
 
-            for conn, timestamp, rawdata in reader.messages():
-                topic = conn.topic
+            # Interate through messages in the bag
+            connections = [x for x in reader.connections if x.topic in conn_map]
+            for conn, timestamp, rawdata in reader.messages(connections=connections):
 
-                # Only include first 60 seconds
-                if ((timestamp - START_TS) / 1e9) > 60:
-                    if topic == '/hercules_node/Husky1/front_center_Scene/image':
-                        pbar.update()
-                    continue
+                # Check its a topic we want to write
+                if conn.topic in conn_map:
+                    pbarC.update(1)
 
-                if topic in conn_map and 'image' in topic:
-                    count = image_counters[topic]
-                    if count % CAMERA_DOWNSAMPLE_RATIO == 0:
-                        msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
-                        resized_msg = resize_image_msg(msg)
-                        serialized = typestore.serialize_cdr(resized_msg, conn.msgtype)
-                        writer.write(conn_map[topic], timestamp, serialized)
-                    image_counters[topic] += 1
-                    if topic == '/hercules_node/Husky1/front_center_Scene/image':
-                        pbar.update()
+                    # See if we need to save this message or cut it
+                    if topic_counters[conn.topic] >= downsample_ratios[conn.topic]:
+                        pbarW.update(1)
 
-                elif topic in conn_map and 'camera_info' in topic:
-                    count = info_counters[topic]
-                    if count % CAMERA_DOWNSAMPLE_RATIO == 0:
-                        msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
-                        msg.width = int(msg.width * 0.5)
-                        msg.height = int(msg.height * 0.5)
-                        serialized = typestore.serialize_cdr(msg, conn.msgtype)
-                        writer.write(conn_map[topic], timestamp, serialized)
-                    info_counters[topic] += 1
+                        # Subtract integer portion of count
+                        topic_counters[conn.topic] -= downsample_ratios[conn.topic]
 
-                elif topic == '/tf':
-                    if tf_counter % TF_DOWNSAMPLE_RATIO == 0:
-                        writer.write(conn_map[topic], timestamp, rawdata)
-                    tf_counter += 1
+                        # If it's an image topic, resize it
+                        if conn.msgtype == 'sensor_msgs/msg/Image':
+                            msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
+                            resized_msg = resize_image_msg(msg)
+                            serialized = typestore.serialize_cdr(resized_msg, conn.msgtype)
+                            writer.write(conn_map[conn.topic], timestamp, serialized)
+                        
+                        # If its a camera_info topic, update it
+                        elif conn.msgtype == 'sensor_msgs/msg/CameraInfo':
+                            msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
+                            msg.width = int(msg.width * 0.5)
+                            msg.height = int(msg.height * 0.5)
+                            serialized = typestore.serialize_cdr(msg, conn.msgtype)
+                            writer.write(conn_map[conn.topic], timestamp, serialized)
+                        
+                        # Otherwise, just write the raw data
+                        else:
+                            writer.write(conn_map[conn.topic], timestamp, rawdata)
 
-                elif topic == '/tf_static':
-                    if static_tf_counter % TF_DOWNSAMPLE_RATIO == 0:
-                        writer.write(conn_map[topic], timestamp, rawdata)
-                    static_tf_counter += 1
+                    # Increment the counter for this topic
+                    topic_counters[conn.topic] += 1
+
+            # Close the progress bars
+            pbarC.close()
+            pbarW.close()
+    
+    print(f"Downsampling complete. Output bag saved to {output_bag}.")
