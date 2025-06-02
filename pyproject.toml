@@ -29,3 +29,6 @@ requires = ["hatchling >= 1.26",
             "argparse",
             "matplotlib"]
 build-backend = "hatchling.build"
+
+[project.scripts]
+rosbag_manipulation = "rosbag_manipulation.__main__:app"
