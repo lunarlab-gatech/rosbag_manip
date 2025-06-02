@@ -13,8 +13,19 @@ import yaml
 
 class rosbag_Manipulator():
 
-    # Initialize using values within the passed dictionary
     def __init__(self, **kwargs):
+        """
+        Initialize the rosbag manipulator with the provided keyword arguments,
+        which is assumed to be a dictionary containing the manipulation configuration.
+
+        Args:
+            **kwargs: Keyword arguments containing the manipulation configuration, including:
+                - 'input_bag': Path to the input ROS2 bag file.
+                - 'output_bag': Path to the output ROS2 bag file, if necessary.
+                - 'operation_params': Dictionary containing operation parameters for specific manipulations.
+                - 'external_msgs_path': Path to the directory containing external message definitions.
+                - 'operation_to_run': The name of the operation to run, which should be a method of this class.
+        """
         for key, value in kwargs.items():
             setattr(self, key, value)
         self.create_typestore_with_external_msgs()
@@ -22,11 +33,23 @@ class rosbag_Manipulator():
 
     @classmethod
     def from_yaml(cls, yaml_path: str):
+        """
+        Create a rosbag manipulator from a YAML file.
+
+        Args:
+            yaml_path (str): Path to the YAML file containing the manipulation configuration.
+        """
         with open(yaml_path, "r") as yaml_file:
             yaml_dict = yaml.safe_load(yaml_file)
             return cls(**yaml_dict)
         
     def run_operation(self):
+        """
+        Load the operation to run from 'self.operation_to_run' and execute it.
+
+        Used Attributes:
+            self.operation_to_run (str): The name of the operation to run, which should be a method of this class.
+        """
         function = getattr(self, self.operation_to_run)
         function()
         
