@@ -15,28 +15,28 @@ pip install .
 
 ## Example Use
 
-See use cases for this repository below. For more information on the command line arguments, use the `--help` argument with the `src/rosbag_manipulation/main.py` file.
+See use cases for this repository below. For more information on all the specific operation parameters, see the `config/explanation.yaml` file.
 
 ### Downsampling
 
 This functionality allows downsampling the hertz rates of topics in the bag (for example, 40 Hz to 5 Hz). It can also prune topics by setting `include_unmentioned_topics` to false. See an example command below for this functionality:
 ```
-rosbag_manipulation <repository_path>/config/downsample.yaml
+rosbag_manip <repository_path>/config/downsample.yaml
 ```
 
 ### Hertz Analysis
 In order to generate histograms with an analysis of the hertz rates for a specific topic, run a command similar to the following:
 ```
-rosbag_manipulation <repository_path>/config/hertz_analysis.yaml
+rosbag_manip <repository_path>/config/hertz_analysis.yaml
 ```
 
 If you want to investigate the `/tf` or `/tf_static` topic, these contain headers per transform, and thus you need to specify the name of the robot, as show below. Note we assume that transform you want to investigate is `{robot_name}/odom_local`:
 ```
-rosbag_manipulation <repository_path>/config/hertz_analysis_tf.yaml
+rosbag_manip <repository_path>/config/hertz_analysis_tf.yaml
 ```
 
 ### Crop
 A rosbag can be cropped to only include message written into the bag within a certain timeframe with this feature. Note that this doesn't take into account the timestamps inside the messages. An example command for this functionality is as follows:
 ```
-rosbag_manipulation <repository_path>/config/crop.yaml
+rosbag_manip <repository_path>/config/crop.yaml
 ```

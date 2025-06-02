@@ -53,6 +53,12 @@ class rosbag_Manipulator():
     def create_typestore_with_external_msgs(self) -> None:
         """
         Create a Typestore with external message types added from the specified path.
+
+        Used Attributes:
+            self.external_msgs_path (str): Path to the directory containing external message definitions.
+
+        Set Attributes:
+            self.typestore (Typestore): The Typestore instance containing the message types.
         """
         self.typestore = get_typestore(Stores.ROS2_HUMBLE)
         
@@ -97,8 +103,18 @@ class rosbag_Manipulator():
     def hertz_analysis(self) -> None:
         """
         Analyze the hertz of various topics in a ROS2 bag file. Will output
-        histograms of the hertz between each pair of consecutive messages 
-        for the specified topic.
+        a histogram of the hertz for each pair of consecutive messages 
+        for the specified topic, and another histogram of the time differences.
+
+        Used Attributes:
+            self.input_bag (str): Path to the input ROS2 bag file.
+            self.operation_params (dict): Dictionary containing operation parameters, including:
+                - 'hertz_analysis': Dictionary with keys:
+                    - 'topic': The topic to analyze.
+                    - 'output_folder': Folder to save the output histograms.
+                    - 'expected_msgs': Expected number of messages in the topic, for progress bar.
+                    - 'robot_name': if 'topic' is '/tf' or '/tf_static', the robot name which then
+                        choses the transform with a child frame id of '{robot_name}/odom_local'.
         """
 
         # Extract operation specific parameters
@@ -177,7 +193,17 @@ class rosbag_Manipulator():
     def downsample(self):
         """
         Downsample a ROS2 bag file by downsampling the frequency of specified topics. Additionally
-        includes or excludes unmentioned topics based on `include_unmentioned_topics` parameter.
+        includes or excludes unmentioned topics based on `include_unmentioned_topics` parameter, which
+        can be used to prune topics.
+
+        Used Attributes:
+            self.input_bag (str): Path to the input ROS2 bag file.
+            self.output_bag (str): Path to the output ROS2 bag file.
+            self.operation_params (dict): Dictionary containing operation parameters, including:
+                - 'downsample': Dictionary with keys:
+                    - 'topics': A dictionary mapping topic names to their downsample ratios.
+                    - 'include_unmentioned_topics': Boolean indicating whether to include topics not 
+                        mentioned in the downsample list in the output bag.
         """
 
         # Convert to pathlib paths
@@ -268,6 +294,14 @@ class rosbag_Manipulator():
         Crop a ROS2 bag file to only include messages within the specified time range. Note
         that this function uses the timestamps of when the messages were written to the bag,
         not the timestamps in the headers of the messages themselves.
+
+        Used Attributes:
+            self.input_bag (str): Path to the input ROS2 bag file.
+            self.output_bag (str): Path to the output ROS2 bag file.
+            self.operation_params (dict): Dictionary containing operation parameters, including:
+                - 'crop': Dictionary with keys:
+                    - 'start_ts': Start timestamp in seconds for cropping.
+                    - 'end_ts': End timestamp in seconds for cropping.
         """
 
         # Extract operation specific parameters

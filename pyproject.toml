@@ -31,4 +31,4 @@ requires = ["hatchling >= 1.26",
 build-backend = "hatchling.build"
 
 [project.scripts]
-rosbag_manipulation = "rosbag_manipulation.__main__:app"
+rosbag_manip = "rosbag_manipulation.__main__:app"
