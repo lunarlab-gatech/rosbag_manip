@@ -1,11 +1,12 @@
-import cv2
 from collections import defaultdict
 from decimal import Decimal
 import glob
 import matplotlib.pyplot as plt
-import numpy as np
 from pathlib import Path
-from rosbags.rosbag2 import Writer, Reader
+from rosbags.rosbag1 import Writer as Writer1
+from rosbags.rosbag1.writer import Connection
+from rosbags.rosbag2 import Reader as Reader2
+from rosbags.rosbag2 import Writer as Writer2
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from rosbags.typesys.store import Typestore
 import tqdm
@@ -23,12 +24,12 @@ class rosbag_Manipulator():
                 - 'input_bag': Path to the input ROS2 bag file.
                 - 'output_bag': Path to the output ROS2 bag file, if necessary.
                 - 'operation_params': Dictionary containing operation parameters for specific manipulations.
-                - 'external_msgs_path': Path to the directory containing external message definitions.
+                - 'external_msgs_path_ros2': Path to the directory containing external message definitions.
                 - 'operation_to_run': The name of the operation to run, which should be a method of this class.
         """
         for key, value in kwargs.items():
             setattr(self, key, value)
-        self.create_typestore_with_external_msgs()
+        self.create_typestores_with_external_msgs()
         self.run_operation()
 
     @classmethod
@@ -73,26 +74,35 @@ class rosbag_Manipulator():
             name = name.parent / 'msg' / name.name
         return str(name)
 
-    def create_typestore_with_external_msgs(self) -> None:
+    def create_typestores_with_external_msgs(self) -> None:
         """
-        Create a Typestore with external message types added from the specified path.
+        Create TypeStores with external message types added from the specified path.
 
         Used Attributes:
-            self.external_msgs_path (str): Path to the directory containing external message definitions.
+            self.external_msgs_path_ros2 (str): Path to the directory containing external message definitions for ROS2.
+            self.external_msgs_path_ros1 (str): Path to the directory containing external message definitions for ROS1.
+                Currently unused.
 
         Set Attributes:
-            self.typestore (Typestore): The Typestore instance containing the message types.
+            self.typestore1 (Typestore): The ROS1 Typestore instance containing the message types.
+            self.typestore2 (Typestore): The ROS2 Typestore instance containing the message types.
         """
-        self.typestore = get_typestore(Stores.ROS2_HUMBLE)
-        
-        # Load external message types
-        if self.external_msgs_path:
-            external_msgs_path = Path(self.external_msgs_path)
-            for msg_path in glob.glob(str(external_msgs_path / Path('**') /Path('*.msg')), recursive=True):
+
+        def register_msgs(path: Path, typestore: Typestore):
+            for msg_path in glob.glob(str(path / Path('**') /Path('*.msg')), recursive=True):
                 msg_path = Path(msg_path)
                 msgdef = msg_path.read_text(encoding='utf-8')
-                self.typestore.register(get_types_from_msg(msgdef, rosbag_Manipulator.guess_msgtype(msg_path)))
-    
+                typestore.register(get_types_from_msg(msgdef, rosbag_Manipulator.guess_msgtype(msg_path)))
+
+        self.typestore1 = get_typestore(Stores.ROS1_NOETIC)
+        self.typestore2 = get_typestore(Stores.ROS2_HUMBLE)
+        
+        # Load external message types
+        try: register_msgs(Path(self.external_msgs_path_ros2), self.typestore2)
+        except: print("No `external_msgs_path_ros2` path provided, using no external msgs for ros2 Typestore")
+        try: register_msgs(Path(self.external_msgs_path_ros1), self.typestore1)
+        except: print("No `external_msgs_path_ros1` path provided, using no external msgs for ros1 Typestore")
+
     # =========================================================================
     # ============================ Hertz Analysis ============================= 
     # ========================================================================= 
@@ -151,7 +161,7 @@ class rosbag_Manipulator():
         input_path = Path(self.input_bag)
 
         # Open the bag file for reading
-        with Reader(input_path) as reader:
+        with Reader2(input_path) as reader:
             # Store timestamps
             topic_timestamps = []
 
@@ -162,7 +172,7 @@ class rosbag_Manipulator():
             connections = [x for x in reader.connections if x.topic == topic]
             for conn, timestamp, rawdata in reader.messages(connections=connections):
                 topic = conn.topic
-                msg = self.typestore.deserialize_cdr(rawdata, conn.msgtype)
+                msg = self.typestore2.deserialize_cdr(rawdata, conn.msgtype)
 
                 if hasattr(msg, 'transforms'):
                     for transform in msg.transforms:
@@ -248,11 +258,11 @@ class rosbag_Manipulator():
             topic_downsample_ratios[topic] = 1 / topic_downsample_ratios[topic]
 
         # Open the bag
-        with Reader(input_bag) as reader:
+        with Reader2(input_bag) as reader:
             connections = reader.connections
             
             # Create a writer with only the specified topics
-            with Writer(output_bag, version=5) as writer:
+            with Writer2(output_bag, version=5) as writer:
                 conn_map = {}
                 for conn in connections:
                     if conn.topic in topic_downsample_ratios:
@@ -260,7 +270,7 @@ class rosbag_Manipulator():
                             topic=conn.topic,
                             msgtype=conn.msgtype,
                             msgdef=conn.msgdef,
-                            typestore=self.typestore,
+                            typestore=self.typestore2,
                             serialization_format='cdr',
                             offered_qos_profiles=conn.ext.offered_qos_profiles
                         )
@@ -339,18 +349,18 @@ class rosbag_Manipulator():
         if output_bag.exists():
             raise AssertionError("Delete Output Directory first!")
 
-        with Reader(input_bag) as reader:
+        with Reader2(input_bag) as reader:
             connections = reader.connections
             
             # Setup the bag writer
-            with Writer(output_bag, version=5) as writer:
+            with Writer2(output_bag, version=5) as writer:
                 conn_map = {}
                 for conn in connections:
                     conn_map[conn.topic] = writer.add_connection(
                         topic=conn.topic,
                         msgtype=conn.msgtype,
                         msgdef=conn.msgdef,
-                        typestore=self.typestore,
+                        typestore=self.typestore2,
                         serialization_format='cdr',
                         offered_qos_profiles=conn.ext.offered_qos_profiles
                     )
@@ -362,3 +372,304 @@ class rosbag_Manipulator():
                 for conn, timestamp, rawdata in reader.messages(start=start_ts * 1e9, stop=end_ts * 1e9):
                     writer.write(conn_map[conn.topic], timestamp, rawdata)
                     pbarW.update(1)
+    
+    # =========================================================================
+    # ============================= Conversions ===============================
+    # ========================================================================= 
+
+    # Defines msg_type mappings from ROS2 to ROS1
+    msg_mapping_ros2_to_ros1 = {
+
+        "builtin_interfaces/msg/Time": "builtin_interfaces/msg/Time",
+        "geometry_msgs/msg/Point": "geometry_msgs/msg/Point",
+        "geometry_msgs/msg/Pose": "geometry_msgs/msg/Pose",
+        "geometry_msgs/msg/PoseWithCovariance": "geometry_msgs/msg/PoseWithCovariance",
+        "geometry_msgs/msg/Quaternion": "geometry_msgs/msg/Quaternion",
+        "geometry_msgs/msg/Twist": "geometry_msgs/msg/Twist",
+        "geometry_msgs/msg/TwistWithCovariance": "geometry_msgs/msg/TwistWithCovariance",
+        "geometry_msgs/msg/Vector3": "geometry_msgs/msg/Vector3",
+        "nav_msgs/msg/Odometry": "nav_msgs/msg/Odometry",
+        "sensor_msgs/msg/Image": "sensor_msgs/msg/Image",
+        "sensor_msgs/msg/CameraInfo": "sensor_msgs/msg/CameraInfo",
+        "sensor_msgs/msg/RegionOfInterest": "sensor_msgs/msg/RegionOfInterest",
+        "std_msgs/msg/Header": "std_msgs/msg/Header",
+    }
+
+    def get_mapping(self, msg_type: str) -> dict:
+        """
+        Given the msg_type string, return a mapping dictionary that describes how to map 
+        values from a ros2 message to a ros1 message. Only supports a limited set of 
+        message types currently, but can be extended to support more.
+
+        Args:
+            msg_type (str): The message type string, e.g., "sensor_msgs/msg/Image".
+        Returns:
+            dict: A mapping dictionary where:
+                keys (list of str): A list defining the attribute in the ros2 message.
+                    Thus, a key of ["header", "stamp"] would map to ros2_msg.header.stamp.
+                values (list of str or tuple): A list defining the attribute in the ros1 message,
+                    OR a tuple where the first element is the attribute in the ros1 message and
+                    the second element is a mapping dictionary for mapping attributes within 
+                    child message types.
+        """
+
+        map = None
+        match msg_type:
+            case "builtin_interfaces/msg/Time":
+                map = {
+                    ["sec"]: ["sec"],
+                    ["nanosec"]: ["nsec"]
+                }
+            case "geometry_msgs/msg/Point":
+                map = {
+                    ["x"]: ["x"],
+                    ["y"]: ["y"],
+                    ["z"]: ["z"]
+                }
+            case "geometry_msgs/msg/Pose":
+                map = {
+                    ["position"]: (["position"], self.get_mapping("geometry_msgs/msg/Point")),
+                    ["orientation"]: (["orientation"], self.get_mapping("geometry_msgs/msg/Quaternion"))
+                }
+            case "geometry_msgs/msg/PoseWithCovariance":
+                map = {
+                    ["pose"]: (["pose"], self.get_mapping("geometry_msgs/msg/Pose")),
+                    ["covariance"]: ["covariance"]
+                }
+            case "geometry_msgs/msg/Quaternion":
+                map = {
+                    ["x"]: ["x"],
+                    ["y"]: ["y"],
+                    ["z"]: ["z"],
+                    ["w"]: ["w"]
+                }
+            case "geometry_msgs/msg/Twist":
+                map = {
+                    ["linear"]: (["linear"], self.get_mapping("geometry_msgs/msg/Vector3")),
+                    ["angular"]: (["angular"], self.get_mapping("geometry_msgs/msg/Vector3"))
+                }
+            case "geometry_msgs/msg/TwistWithCovariance":
+                map = {
+                    ["twist"]: (["twist"], self.get_mapping("geometry_msgs/msg/Twist")),
+                    ["covariance"]: ["covariance"]          
+                }
+            case "geometry_msgs/msg/Vector3":
+                map = {
+                    ["x"]: ["x"],
+                    ["y"]: ["y"],
+                    ["z"]: ["z"]
+                }
+            case "nav_msgs/msg/Odometry":
+                map = {
+                    ["header"]: (["header"], self.get_mapping("std_msgs/msg/Header")),
+                    ["child_frame_id"]: ["child_frame_id"],
+                    ["pose"]: (["pose"], self.get_mapping("geometry_msgs/msg/PoseWithCovariance")),
+                    ["twist"]: (["twist"], self.get_mapping("geometry_msgs/msg/TwistWithCovariance"))
+                }
+            case "sensor_msgs/msg/Image":
+                map = {
+                    ["header"]: (["header"], self.get_mapping("std_msgs/msg/Header")),
+                    ["height"]: ["height"],
+                    ["width"]: ["width"],
+                    ["encoding"]: ["encoding"], # Not, this may not map 1-to-1 if encoding strings are different between ROS1/ROS2
+                    ["is_bigendian"]: ["is_bigendian"],
+                    ["step"]: ["step"],
+                    ["data"]: ["data"]
+                }
+            case "sensor_msgs/msg/CameraInfo":
+                map = {
+                    ["header"]: (["header"], self.get_mapping("std_msgs/msg/Header")),
+                    ["height"]: ["height"],
+                    ["width"]: ["width"],
+                    ["distortion_model"]: ["distortion_model"], # May not map 1-to-1 if models differ between ROS1/ROS2
+                    ["d"]: ["D"],
+                    ["k"]: ["K"],
+                    ["r"]: ["R"],
+                    ["p"]: ["P"],
+                    ["binning_x"]: ["binning_x"],
+                    ["binning_y"]: ["binning_y"],
+                    ["roi"]: (["roi"], self.get_mapping("sensor_msgs/msg/RegionOfInterest"))
+                }
+            case "sensor_msgs/msg/RegionOfInterest":
+                map = {
+                    ["x_offset"]: ["x_offset"],
+                    ["y_offset"]: ["y_offset"],
+                    ["height"]: ["height"],
+                    ["width"]: ["width"],
+                    ["do_rectify"]: ["do_rectify"]
+                }
+            case "std_msgs/msg/Header":
+                map = {
+                    ["stamp"]: ["stamp", self.get_mapping("builtin_interfaces/msg/Time")],
+                    ["frame_id"]: ["frame_id"]
+                    # Note: ROS1 msg has a 'seq' value, which we define no mapping for.
+                    # Thus, default value in ROS1 is used.
+                }
+            case _:
+                raise ValueError(f"Currently unsupported msg_type: {msg_type}")
+            
+        return map
+        
+        
+    def solve_for_all_mappings(self, map: dict[list, list | tuple], msg_type: str | None) -> dict:
+        """
+        Helper method that will take the provided map and recursively solve for all mappings
+        that are not yet resolved. Additionally, if a map isn't provided, it will generate
+        an initial map from the provided msg_type.
+
+        Args:
+            map (dict): A mapping dictionary where:
+                keys (list of str): A list defining the attribute in the ros2 message.
+                    Thus, a key of ["header", "stamp"] would map to ros2_msg.header.stamp.
+                values (list of str or tuple): A list defining the attribute in the ros1 message,
+                    OR a tuple where the first element is the attribute in the ros1 message and
+                    the second element is a mapping dictionary for mapping attributes within 
+                    child message types.
+            msg_type (str | None): The message type string, e.g., "sensor_msgs/msg/Image".
+                If map is None, an initial map will be generated from the msg_type.
+        
+        Returns:
+            dict: A mapping dictionary where:
+                keys (list of str): A list defining the attribute in the ros2 message.
+                    Thus, a key of ["header", "stamp"] would map to ros2_msg.header.stamp.
+                values (list of str): A list defining the attribute in the ros1 message. Note
+                that this can no longer be a tuple, as all mappings have been resolved.
+        """
+        
+        # Check input parameters
+        if map is None and msg_type is not None:\
+            # If no map is provided, we need to generate it from the msg_type
+            map = self.get_mapping(msg_type)
+        if map is None and msg_type is None:
+            raise ValueError("No map provided and no msg_type specified to generate initial map.")
+        if map is not None and msg_type is not None:
+            print("WARNING: msg_type provided, but map is already defined. Using provided map and ignoring msg_type.")
+
+        # Iterate through each key in the map to check for unresolved mappings
+        for key in map:
+            # There are unresolved mappings, so we need to solve them
+            if type(map[key]) is tuple:
+
+                # Extract value and child map
+                value = map[key][0]
+                child_map = map[key][1]
+
+                # Solve recursively to only get values with type "list" in the child map
+                child_map = self.solve_for_all_mappings(child_map, None)
+
+                # Now, take child map and bring it into the current map
+                for child_key in child_map:
+                    new_key = key + child_key
+                    new_value = value + child_map[child_key]
+                    map[new_key] = new_value
+                
+                # Remove the old key
+                del map[key]
+        return map
+
+    def map_ros2_to_ros1(self, ros2_msg: object, msg_type: str) -> object:
+        """
+        Map a ROS2 message to a ROS1 message based on the provided message type.
+
+        Args:
+            ros2_msg (object): The ROS2 message object to be mapped.
+            msg_type (str): The message type string, e.g., "sensor_msgs/msg/Image".
+
+        Returns:
+            object: The mapped ROS1 message object.
+        """
+
+        # Initialize the ros1_msg
+        ros1_msg = self.typestore1[self.msg_mapping_ros2_to_ros1[msg_type]]
+
+        # Map attributes from ros2_msg to ros1_msg
+        for ros2_attr_list, ros1_attr_list in self.solve_for_all_mappings(msg_type).items():
+
+            # Get final ros2 object
+            ros2_obj = ros2_msg
+            while len(ros2_attr_list) > 1:
+                ros2_obj = getattr(ros2_obj, ros2_attr_list[0])
+                ros2_attr_list = ros2_attr_list[1:]
+
+            # Get final ros1 object
+            ros1_obj = ros1_msg
+            while len(ros1_attr_list) > 1:
+                ros1_obj = getattr(ros1_obj, ros1_attr_list[0])
+                ros1_attr_list = ros1_attr_list[1:]
+
+            # Set the attribute in the ros1_msg
+            setattr(ros1_obj, ros1_attr_list[0], getattr(ros2_obj, ros2_attr_list[0]))
+
+    def convert_ros2_to_ros1(self):
+        """
+        Convert a ROS2 bag file into a ROS1 bag file.
+
+        Used Attributes:
+            self.input_bag (str): Path to the input ROS2 bag file.
+            self.output_bag (str): Path to the output ROS1 bag file.
+        """
+
+        # Convert to pathlib paths
+        input_bag = Path(self.input_bag)
+        output_bag = Path(self.output_bag)
+
+        # Make sure we aren't overwriting an existing output bag
+        if output_bag.exists():
+            raise AssertionError("Delete Output Directory first!")
+
+        with Reader2(input_bag) as reader:
+            connections = reader.connections
+            
+            # Setup the bag writer
+            with Writer1(output_bag) as writer:
+                conn_map = {}
+                for conn in connections:
+                    # Determine latching behavior (if possible)
+                    latching = None
+                    if len(conn.ext.offered_qos_profiles) == 1:
+                        if conn.ext.offered_qos_profiles[0].durability.value == 2: latching = 0 # VOLATILE
+                        elif conn.ext.offered_qos_profiles[0].durability.value == 1: latching = 1 # TRANSIENT_LOCAL
+                    else: pass
+
+                    # Only write supported types
+                    msg_def = None
+                    try: 
+                        msg_def = self.typestore1.types[self.msg_mapping_ros2_to_ros1[conn.msgtype]]
+                    except:
+                        print(f"No mapping currently provided for {conn.msgtype}, skipping...")
+                        continue
+
+                    # Add the connection
+                    new_conn: Connection = writer.add_connection(
+                        topic=conn.topic,
+                        msgtype=self.msg_mapping_ros2_to_ros1[conn.msgtype],
+                        msgdef=msg_def,
+                        typestore=self.typestore1,
+                        md5sum=None,
+                        callerid=None,
+                        latching=latching
+                    )
+                    conn_map[conn.topic] = new_conn
+
+                # setup tqdm 
+                pbarW = tqdm.tqdm(total=None, desc="Writing messages", unit=" messages")
+
+                # Iternate through messages in the bag
+                for conn, timestamp, rawdata in reader.messages():
+                    # Only writes messages that had a connection successfully created
+                    try: 
+                        # Deserialize the ROS2 message
+                        ros2_msg = self.typestore2.deserialize_cdr(rawdata, conn.msgtype)
+
+                        # Map the ROS2 message to a ROS1 message
+                        ros1_msg = self.mapping(ros2_msg, conn.msgtype)
+
+                        # Serialize the ROS1 message
+                        rawdata = self.typestore1.serialize_ros1(ros1_msg, conn_map[conn.topic].msgtype)
+
+                        # Write the message to the ROS1 bag
+                        writer.write(conn_map[conn.topic], timestamp, rawdata)
+                        pbarW.update(1)
+
+                    except:
+                        pass

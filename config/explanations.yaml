@@ -5,7 +5,7 @@ input_bag:
 output_bag:
 
 # The path to repositories with additional message types to support
-external_msgs_path: 
+external_msgs_path_ros2: 
 
 # This decides with of the operations below is run
 operation_to_run: 
@@ -48,3 +48,6 @@ operation_params:
     # True if topics not mentioned in 'topics' should be included in the bag with no downsampling
     # False if they should not be included
     include_unmentioned_topics: 
+
+  # Convert a ROS2 bag into a ROS1 bag. Not all message types are supported, but can be extended.
+  convert_ros2_to_ros1:

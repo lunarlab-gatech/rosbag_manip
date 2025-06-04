@@ -1,8 +1,6 @@
 input_bag: /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV
+output_bag: /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV_ros1.bag
 external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs
-operation_to_run: hertz_analysis
+operation_to_run: 'convert_ros2_to_ros1'
 operation_params:
-  hertz_analysis:
-    topic: /hercules_node/Drone1/front_center_Scene/image 
-    output_folder: /home/dbutterfield3/Research/rosbag_manipulation/figures
-    expected_msgs: 4125
+  convert_ros2_to_ros1:
