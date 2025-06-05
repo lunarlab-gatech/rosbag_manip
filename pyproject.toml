@@ -1,6 +1,6 @@
 [project]
 name = "rosbag_manip"
-version = "0.0.1"
+version = "0.0.2"
 authors = [
   { name="Daniel Butterfield", email="danielcbutter@gmail.com" },
 ]
@@ -11,6 +11,11 @@ classifiers = [
     "Programming Language :: Python :: 3",
     "Operating System :: POSIX :: Linux",
 ]
+dependencies = ["matplotlib",
+                "numpy",
+                "rosbags",
+                "tqdm",
+                "typer"]
 
 # == License information TBD ==
 # license = ""
@@ -21,12 +26,7 @@ Homepage = "https://github.com/lunarlab-gatech/rosbag_manip"
 Issues = "https://github.com/lunarlab-gatech/rosbag_manip/issues"
 
 [build-system]
-requires = ["hatchling >= 1.26",
-            "matplotlib",
-            "numpy",
-            "rosbags",
-            "tqdm",
-            "typer"]
+requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
 
 [project.scripts]
