@@ -15,7 +15,8 @@ dependencies = ["matplotlib",
                 "numpy",
                 "rosbags",
                 "tqdm",
-                "typer"]
+                "typer",
+                "pyyaml"]
 
 # == License information TBD ==
 # license = ""

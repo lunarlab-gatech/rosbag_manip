@@ -1,6 +1,6 @@
 # rosbag_manipulation
 
-A set of tools for manipulation ROS2 rosbags in a deterministic manner. For example `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). Thus, I write this code to fill the void.
+A set of tools for manipulation ROS2 rosbags in a deterministic manner, meant to fill a void in current tools. For example, `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). 
 
 **WARNING:** Currently, this repository is in active development and functionality isn't guaranteed to work. If you will depend on this repository for important tasks, perhaps write test cases for the corresponding functionality before deployment/use.
 
