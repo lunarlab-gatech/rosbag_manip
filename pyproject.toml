@@ -1,5 +1,5 @@
 [project]
-name = "rosbag_manipulation"
+name = "rosbag_manip"
 version = "0.0.1"
 authors = [
   { name="Daniel Butterfield", email="danielcbutter@gmail.com" },
@@ -17,18 +17,17 @@ classifiers = [
 # license-files = ["LICEN[CS]E*"]
 
 [project.urls]
-Homepage = "https://github.com/lunarlab-gatech/rosbag_manipulation"
-Issues = "https://github.com/lunarlab-gatech/rosbag_manipulation/issues"
+Homepage = "https://github.com/lunarlab-gatech/rosbag_manip"
+Issues = "https://github.com/lunarlab-gatech/rosbag_manip/issues"
 
 [build-system]
 requires = ["hatchling >= 1.26",
+            "matplotlib",
             "numpy",
-            "tqdm",
-            "opencv-python",
             "rosbags",
-            "argparse",
-            "matplotlib"]
+            "tqdm",
+            "typer"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-rosbag_manip = "rosbag_manipulation.__main__:app"
+rosbag_manip = "rosbag_manip.__main__:app"

@@ -6,7 +6,7 @@ A set of tools for manipulation ROS2 rosbags in a deterministic manner. For exam
 
 ## Installation
 
-You will need Python 3 to run this code. It has been used with Python 3.10, but may work with other version. Run the following commands to install the repository:
+You will need Python 3.10+ to run this code. Run the following commands to install the repository:
 ```
 git submodule init
 git submodule update
@@ -40,3 +40,12 @@ A rosbag can be cropped to only include message written into the bag within a ce
 ```
 rosbag_manip <repository_path>/config/crop.yaml
 ```
+
+### ROS2 to ROS1 conversion
+A ROS2 bag can be converted to ROS1 with this functionality, note that only certain message types are supported. When running the command, any unsuported message types will print a warning message. 
+```
+rosbag_manip <repository_path>/config/convert_ros2_to_ros1.yaml
+```
+
+
+Note that support for more messages can be easily added by altering `get_mapping()` and `msg_mapping_ros2_to_ros1` in `rosbag_manip.py`.
