@@ -17,21 +17,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Free Disk Space (Ubuntu)
-      uses: jlumbroso/free-disk-space@main
-      with:
-        # this might remove tools that are actually needed,
-        # if set to "true" but frees about 6 GB
-        tool-cache: false
-        
-        # all of these default to true, but feel free to set to
-        # "false" if necessary for your workflow
-        android: true
-        dotnet: true
-        haskell: true
-        large-packages: true
-        docker-images: true
-        swap-storage: true
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
       with:
@@ -45,6 +30,11 @@ jobs:
         python -m pip install .
     - name: Import external message types
       uses: snickerbockers/submodules-init@v4
-    - name: Test with unittest
+    - name: Test with unittest & evaluate test coverage
       run: |
-        python -m unittest discover tests/ -v
+        coverage run --source tests,rosbag_manip -m unittest discover tests/ -v
+    - name: Coveralls GitHub Action (Upload Coverage Report)
+      uses: coverallsapp/github-action@v2.3.6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+      

@@ -1,28 +1,28 @@
-input_bag: /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV
-output_bag: /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV_topicsPruned
+input_bag: /media/dbutterfield3/3459-A001/hercules_datasets/ausenv_test1_checkpoints_CSLAM_2UAVUGV
+output_bag: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_pruned
 external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs
 operation_to_run: 'downsample'
 operation_params:
   downsample:
     topics: 
-      /hercules_node/Husky1/odom_local: 1.0
-      /hercules_node/Husky2/odom_local: 1.0
-      /hercules_node/Drone1/odom_local: 1.0
-      /hercules_node/Drone2/odom_local: 1.0
+      /hercules_node/Husky1/ground_truth/odom_local: 1.0
+      /hercules_node/Husky2/ground_truth/odom_local: 1.0
+      /hercules_node/Drone1/ground_truth/odom_local: 1.0
+      /hercules_node/Drone2/ground_truth/odom_local: 1.0
       /hercules_node/Husky1/front_center_Scene/image: 1.0
       /hercules_node/Husky1/front_center_Scene/camera_info: 1.0
-      /hercules_node/Husky1/front_center_DepthPerspective/image: 1.0
-      /hercules_node/Husky1/front_center_DepthPerspective/camera_info: 1.0
+      /hercules_node/Husky1/front_center_DepthPlanar/image: 1.0
+      /hercules_node/Husky1/front_center_DepthPlanar/camera_info: 1.0
       /hercules_node/Husky2/front_center_Scene/image: 1.0
       /hercules_node/Husky2/front_center_Scene/camera_info: 1.0
-      /hercules_node/Husky2/front_center_DepthPerspective/image: 1.0
-      /hercules_node/Husky2/front_center_DepthPerspective/camera_info: 1.0
+      /hercules_node/Husky2/front_center_DepthPlanar/image: 1.0
+      /hercules_node/Husky2/front_center_DepthPlanar/camera_info: 1.0
       /hercules_node/Drone1/front_center_Scene/image: 1.0
       /hercules_node/Drone1/front_center_Scene/camera_info: 1.0
-      /hercules_node/Drone1/front_center_DepthPerspective/image: 1.0
-      /hercules_node/Drone1/front_center_DepthPerspective/camera_info: 1.0
+      /hercules_node/Drone1/front_center_DepthPlanar/image: 1.0
+      /hercules_node/Drone1/front_center_DepthPlanar/camera_info: 1.0
       /hercules_node/Drone2/front_center_Scene/image: 1.0
       /hercules_node/Drone2/front_center_Scene/camera_info: 1.0
-      /hercules_node/Drone2/front_center_DepthPerspective/image: 1.0
-      /hercules_node/Drone2/front_center_DepthPerspective/camera_info: 1.0
+      /hercules_node/Drone2/front_center_DepthPlanar/image: 1.0
+      /hercules_node/Drone2/front_center_DepthPlanar/camera_info: 1.0
     include_unmentioned_topics: False

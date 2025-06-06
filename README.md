@@ -1,6 +1,6 @@
 # rosbag_manipulation
 
-[![Python Unit Tests](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml/badge.svg?branch=master)](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml)
+[![Python Unit Tests](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml/badge.svg?branch=master)](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml) [![Coverage Status](https://coveralls.io/repos/github/lunarlab-gatech/rosbag_manip/badge.svg?branch=master)](https://coveralls.io/github/lunarlab-gatech/rosbag_manip?branch=master)
 
 A set of tools for manipulation ROS2 rosbags in a deterministic manner, meant to fill a void in current tools. For example, `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). 
 
