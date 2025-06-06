@@ -45,6 +45,11 @@ jobs:
         python -m pip install .
     - name: Import external message types
       uses: snickerbockers/submodules-init@v4
-    - name: Test with unittest
+    - name: Test with unittest & evaluate test coverage
       run: |
-        python -m unittest discover tests/ -v
+        coverage run --source tests,rosbag_manip -m unittest discover tests/ -v
+    - name: Coveralls GitHub Action (Upload Coverage Report)
+      uses: coverallsapp/github-action@v2.3.6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+      

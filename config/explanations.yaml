@@ -6,6 +6,7 @@ output_bag:
 
 # The path to repositories with additional message types to support
 external_msgs_path_ros2: 
+external_msgs_path_ros1:
 
 # This decides with of the operations below is run
 operation_to_run: 
