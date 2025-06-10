@@ -5,6 +5,8 @@ operation_to_run: 'downsample'
 operation_params:
   downsample:
     topics: 
+      /tf: 1.0
+      /tf_static: 1.0
       /hercules_node/Husky1/ground_truth/odom_local: 1.0
       /hercules_node/Husky2/ground_truth/odom_local: 1.0
       /hercules_node/Drone1/ground_truth/odom_local: 1.0

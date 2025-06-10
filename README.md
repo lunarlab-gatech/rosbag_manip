@@ -2,7 +2,9 @@
 
 [![Python Unit Tests](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml/badge.svg?branch=master)](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml) [![Coverage Status](https://coveralls.io/repos/github/lunarlab-gatech/rosbag_manip/badge.svg?branch=master)](https://coveralls.io/github/lunarlab-gatech/rosbag_manip?branch=master)
 
-A set of tools for manipulation ROS2 rosbags in a deterministic manner, meant to fill a void in current tools. For example, `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). 
+A set of tools for manipulation ROS2 bags in a deterministic manner, meant to fill a void in current tools. For example, `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). 
+
+Currently, the library assumes the ROS2 bags have messages from ROS2 Humble, and for converting to ROS1 bags, the output bag will be compatible with ROS1 Noetic.
 
 **WARNING:** Currently, this repository is in active development and functionality isn't guaranteed to work. If you will depend on this repository for important tasks, perhaps write test cases for the corresponding functionality before deployment/use.
 
@@ -48,6 +50,5 @@ A ROS2 bag can be converted to ROS1 with this functionality, note that only cert
 ```
 rosbag_manip <repository_path>/config/convert_ros2_to_ros1.yaml
 ```
-
 
 Note that support for more messages can be easily added by altering `get_mapping()` and `msg_mapping_ros2_to_ros1` in `rosbag_manip.py`.
