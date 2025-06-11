@@ -5,6 +5,7 @@ import inspect
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import pickle
 from rosbags.rosbag1 import Writer as Writer1
 from rosbags.rosbag1.writer import Connection
 from rosbags.rosbag2 import Reader as Reader2
@@ -29,11 +30,20 @@ class rosbag_manipulation():
                 - 'external_msgs_path_ros2': Path to the directory containing external message definitions.
                 - 'operation_to_run': The name of the operation to run, which should be a method of this class.
         """
+
+        # Assign attributes from input arguments
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+        # Get Typestores
         stores = self.create_typestores_with_external_msgs()
         self.typestore1 = stores[0]
         self.typestore2 = stores[1]
+
+        # Setup dictionary to store msg instances
+        self.ros1_msg_instances = {}
+
+        # Run desired operation
         self.run_operation()
 
     @classmethod
@@ -694,6 +704,14 @@ class rosbag_manipulation():
             object: The initialized ROS1 class message.
         """
 
+        # If we've already made an instance, return it
+        try:
+            # Doesn't work for messages with lists, as list size might vary
+            if msg_type != 'tf2_msgs/msg/TFMessage':
+                return pickle.loads(self.ros1_msg_instances[msg_type])
+        except:
+            pass
+
         # Initialize the ros1_msg class
         ros1_msg_class = self.typestore1.types[self.msg_mapping_ros2_to_ros1[msg_type]]
 
@@ -750,7 +768,13 @@ class rosbag_manipulation():
                 initial_parameters.append(self.get_default_param(type_str, ros2_msg_attr))
 
         # Initialize class with dummy values
-        return ros1_msg_class(*initial_parameters)
+        instance = ros1_msg_class(*initial_parameters)
+
+        # If possible (msg doesn't have lists), save it so we can reuse it next time
+        if msg_type != "tf2_msgs/msg/TFMessage":
+            # Dump it to a pickle object for deep copying later, but do it now for speed
+            self.ros1_msg_instances[msg_type] = pickle.dumps(instance)
+        return instance
 
     def iterate_and_assign(self, ros2_attr_list: list[str], ros1_attr_list: list[str], 
                            ros2_obj: object, ros1_obj: object, msg_type: str):

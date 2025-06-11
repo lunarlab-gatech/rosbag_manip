@@ -51,4 +51,23 @@ A ROS2 bag can be converted to ROS1 with this functionality, note that only cert
 rosbag_manip <repository_path>/config/convert_ros2_to_ros1.yaml
 ```
 
-Note that support for more messages can be easily added by altering `get_mapping()` and `msg_mapping_ros2_to_ros1` in `rosbag_manip.py`.
+Note that support for more messages can be easily added by altering `get_mapping()` and `msg_mapping_ros2_to_ros1` in `rosbag_manip.py`. Here is a list of all currently supported msg types:
+```python
+"builtin_interfaces/msg/Time"
+"geometry_msgs/msg/Point"
+"geometry_msgs/msg/Pose"
+"geometry_msgs/msg/PoseWithCovariance"
+"geometry_msgs/msg/Quaternion"
+"geometry_msgs/msg/Transform"
+"geometry_msgs/msg/TransformStamped"
+"geometry_msgs/msg/Twist"
+"geometry_msgs/msg/TwistWithCovariance"
+"geometry_msgs/msg/Vector3"
+"nav_msgs/msg/Odometry"
+"sensor_msgs/msg/Image"
+"sensor_msgs/msg/Imu"
+"sensor_msgs/msg/CameraInfo"
+"sensor_msgs/msg/RegionOfInterest"
+"std_msgs/msg/Header"
+"tf2_msgs/msg/TFMessage"
+```

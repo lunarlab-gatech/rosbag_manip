@@ -1,6 +1,6 @@
 input_bag: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_pruned
 output_bag: /home/dbutterfield3/Research/rosbag_manip/tests/test_bags/hercules_test_bag_pruned_3
-external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs_ros2
+external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manip/external_msgs_ros2
 operation_to_run: 'crop'
 operation_params:
   crop:
