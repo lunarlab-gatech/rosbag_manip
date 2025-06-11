@@ -1,12 +1,16 @@
 input_bag: /media/dbutterfield3/3459-A001/hercules_datasets/ausenv_test1_checkpoints_CSLAM_2UAVUGV
 output_bag: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_pruned
-external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs
+external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs_ros2
 operation_to_run: 'downsample'
 operation_params:
   downsample:
     topics: 
       /tf: 1.0
       /tf_static: 1.0
+      /hercules_node/Husky1/imu/imu: 1.0
+      /hercules_node/Husky2/imu/imu: 1.0
+      /hercules_node/Drone1/imu/imu: 1.0
+      /hercules_node/Drone2/imu/imu: 1.0
       /hercules_node/Husky1/ground_truth/odom_local: 1.0
       /hercules_node/Husky2/ground_truth/odom_local: 1.0
       /hercules_node/Drone1/ground_truth/odom_local: 1.0

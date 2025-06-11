@@ -1,5 +1,5 @@
 input_bag: /media/dbutterfield3/T73/hercules_test_datasets_V1.1/ausenv_test1_checkpoints_CSLAM_2UAVUGV
-external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs
+external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manipulation/external_msgs_ros2
 operation_to_run: hertz_analysis
 operation_params:
   hertz_analysis:
