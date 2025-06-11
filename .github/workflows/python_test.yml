@@ -27,12 +27,12 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     - name: Install the package
       run: |
-        python -m pip install .
+        python -m pip install -e .
     - name: Import external message types
       uses: snickerbockers/submodules-init@v4
     - name: Test with unittest & evaluate test coverage
       run: |
-        coverage run --source tests,rosbag_manip -m unittest discover tests/ -v
+        coverage run --source rosbag_manip -m unittest discover tests/ -v
     - name: Coveralls GitHub Action (Upload Coverage Report)
       uses: coverallsapp/github-action@v2.3.6
       with:
