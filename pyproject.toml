@@ -1,6 +1,6 @@
 [project]
 name = "rosbag_manip"
-version = "0.0.2"
+version = "0.0.3"
 authors = [
   { name="Daniel Butterfield", email="danielcbutter@gmail.com" },
 ]
@@ -15,6 +15,7 @@ dependencies = ["coverage",
                 "matplotlib",
                 "numpy",
                 "rosbags",
+                "snakeviz",
                 "tqdm",
                 "typer",
                 "pyyaml"]

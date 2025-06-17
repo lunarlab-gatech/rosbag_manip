@@ -5,6 +5,7 @@ import inspect
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
+import pickle
 from rosbags.rosbag1 import Writer as Writer1
 from rosbags.rosbag1.writer import Connection
 from rosbags.rosbag2 import Reader as Reader2
@@ -29,9 +30,20 @@ class rosbag_manipulation():
                 - 'external_msgs_path_ros2': Path to the directory containing external message definitions.
                 - 'operation_to_run': The name of the operation to run, which should be a method of this class.
         """
+
+        # Assign attributes from input arguments
         for key, value in kwargs.items():
             setattr(self, key, value)
-        self.create_typestores_with_external_msgs()
+
+        # Get Typestores
+        stores = self.create_typestores_with_external_msgs()
+        self.typestore1 = stores[0]
+        self.typestore2 = stores[1]
+
+        # Setup dictionary to store msg instances
+        self.ros1_msg_instances = {}
+
+        # Run desired operation
         self.run_operation()
 
     @classmethod
@@ -76,7 +88,7 @@ class rosbag_manipulation():
             name = name.parent / 'msg' / name.name
         return str(name)
 
-    def create_typestores_with_external_msgs(self) -> None:
+    def create_typestores_with_external_msgs(self) -> tuple[Typestore, Typestore]:
         """
         Create TypeStores with external message types added from the specified path.
 
@@ -85,9 +97,8 @@ class rosbag_manipulation():
             self.external_msgs_path_ros1 (str): Path to the directory containing external message definitions for ROS1.
                 Currently unused.
 
-        Set Attributes:
-            self.typestore1 (Typestore): The ROS1 Typestore instance containing the message types.
-            self.typestore2 (Typestore): The ROS2 Typestore instance containing the message types.
+        Returns:
+            tuple[Typestore, Typestore]: Pair of the ROS1 Typestore instance and the ROS2 Typestore instance.
         """
 
         def register_msgs(path: Path, typestore: Typestore):
@@ -96,14 +107,15 @@ class rosbag_manipulation():
                 msgdef = msg_path.read_text(encoding='utf-8')
                 typestore.register(get_types_from_msg(msgdef, rosbag_manipulation.guess_msgtype(msg_path)))
 
-        self.typestore1 = get_typestore(Stores.ROS1_NOETIC)
-        self.typestore2 = get_typestore(Stores.ROS2_HUMBLE)
+        typestore1 = get_typestore(Stores.ROS1_NOETIC)
+        typestore2 = get_typestore(Stores.ROS2_HUMBLE)
         
         # Load external message types
-        try: register_msgs(Path(self.external_msgs_path_ros2), self.typestore2)
+        try: register_msgs(Path(self.external_msgs_path_ros2), typestore2)
         except: print("No `external_msgs_path_ros2` path provided, using no external msgs for ros2 Typestore")
-        try: register_msgs(Path(self.external_msgs_path_ros1), self.typestore1)
+        try: register_msgs(Path(self.external_msgs_path_ros1), typestore1)
         except: print("No `external_msgs_path_ros1` path provided, using no external msgs for ros1 Typestore")
+        return (typestore1, typestore2)
 
     # =========================================================================
     # ============================ Hertz Analysis ============================= 
@@ -193,6 +205,11 @@ class rosbag_manipulation():
         hertz_diffs = [topic_timestamps[i] - topic_timestamps[i - 1] for i in range(1, len(topic_timestamps))]
         hertz_values = [1 / diff for diff in hertz_diffs if diff > 0]
 
+        # Output a message if some differences are zero
+        num_seq_messages_with_same_timestamps = len([x for x in hertz_diffs if x == 0])
+        if num_seq_messages_with_same_timestamps > 0:
+            print(f"Warning: Sequential Pairs of timestamps are equivalent {num_seq_messages_with_same_timestamps} times. Excluding from plot...")
+
         # Sort each of these lists
         hertz_diffs.sort()
         hertz_values.sort()
@@ -230,6 +247,10 @@ class rosbag_manipulation():
         Downsample a ROS2 bag file by downsampling the frequency of specified topics. Additionally
         includes or excludes unmentioned topics based on `include_unmentioned_topics` parameter, which
         can be used to prune topics.
+         
+        If the number of msgs on a topic multiplied by the downsample ratio is not an integer
+        (ex. 696 * 0.1 = 69.6), then the number of messages will be the nearest integer of the 
+        calculated float (ex. np.round(69.6) == 70).
 
         Used Attributes:
             self.input_bag (str): Path to the input ROS2 bag file.
@@ -246,19 +267,39 @@ class rosbag_manipulation():
         output_bag = Path(self.output_bag)
 
         # Extract operation specific parameters
-        topic_downsample_ratios: dict = self.operation_params['downsample']['topics']
+        topic_downsample_ratios: dict = self.operation_params['downsample']['topics'].copy()
         include_unmentioned_topics: bool = self.operation_params['downsample']['include_unmentioned_topics']
 
         # Ensure we aren't overwriting an existing output bag
         if output_bag.exists():
             raise AssertionError("Delete Output Directory first!")
         
-        # Calculate downsample ratios
+        # Check for valid input downsample ratios
         for topic in topic_downsample_ratios:
-            if topic_downsample_ratios[topic] <= 0:
-                raise ValueError("Downsample rates must be greater than 0.")
-            topic_downsample_ratios[topic] = 1 / topic_downsample_ratios[topic]
+            ratio = topic_downsample_ratios[topic]
+            if ratio <= 0 or ratio > 1:
+                raise ValueError("Downsample rates must be >0 and <= 1")
 
+        # Open the metadata.yaml file and get number of messages on each of the topics
+        metadata_path = Path(self.input_bag / 'metadata.yaml')
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Unable to find metadata.yaml in ROS2 bag: {metadata_path}")
+        with open(metadata_path, 'r') as f:
+            metadata = yaml.safe_load(f)
+
+        topic_counts = {}
+        for topic_info in metadata.get('rosbag2_bagfile_information').get('topics_with_message_count'):
+            topic_name = topic_info['topic_metadata']['name']
+            message_count = topic_info['message_count']
+            topic_counts[topic_name] = message_count
+
+        # Calculate which messages we want to save for each topic
+        indicies_to_save = {}
+        for topic in topic_counts:
+            if topic in topic_downsample_ratios:
+                desired_final_count = int(np.round(topic_counts[topic] * topic_downsample_ratios[topic]))
+                indicies_to_save[topic] = np.linspace(0, topic_counts[topic] - 1, num=desired_final_count, dtype=int).tolist()
+                
         # Open the bag
         with Reader2(input_bag) as reader:
             connections = reader.connections
@@ -280,7 +321,7 @@ class rosbag_manipulation():
                 # Initialize counters for each topic
                 topic_counters = defaultdict(int)
                 for topic in topic_downsample_ratios:
-                    topic_counters[topic] = 1
+                    topic_counters[topic] = 0
 
                 # Setup progress bars
                 pbarC = tqdm.tqdm(total=None, desc="Downsampling Requested Messages", unit=" messages")
@@ -294,21 +335,9 @@ class rosbag_manipulation():
                     if (conn.topic in topic_downsample_ratios) or include_unmentioned_topics:
                         pbarC.update(1)
 
-                        # Extract the downsample ratio for this topic
-                        try:
-                            downsample_ratio = topic_downsample_ratios[conn.topic]
-                        except KeyError:
-                            # Assume no downsampling for unmentioned topics
-                            downsample_ratio = 1.0
-
                         # See if we need to save this message or cut it
-                        if topic_counters[conn.topic] >= topic_downsample_ratios[conn.topic]:
+                        if topic_counters[conn.topic] in indicies_to_save[conn.topic]:
                             pbarW.update(1)
-
-                            # Subtract integer portion of count
-                            topic_counters[conn.topic] -= topic_downsample_ratios[conn.topic]
-                            
-                            # Write the raw data
                             writer.write(conn_map[conn.topic], timestamp, rawdata)
 
                         # Increment the counter for this topic
@@ -386,21 +415,28 @@ class rosbag_manipulation():
         "geometry_msgs/msg/Pose": "geometry_msgs/msg/Pose",
         "geometry_msgs/msg/PoseWithCovariance": "geometry_msgs/msg/PoseWithCovariance",
         "geometry_msgs/msg/Quaternion": "geometry_msgs/msg/Quaternion",
+        "geometry_msgs/msg/Transform": "geometry_msgs/msg/Transform",
+        "geometry_msgs/msg/TransformStamped": "geometry_msgs/msg/TransformStamped",
         "geometry_msgs/msg/Twist": "geometry_msgs/msg/Twist",
         "geometry_msgs/msg/TwistWithCovariance": "geometry_msgs/msg/TwistWithCovariance",
         "geometry_msgs/msg/Vector3": "geometry_msgs/msg/Vector3",
         "nav_msgs/msg/Odometry": "nav_msgs/msg/Odometry",
         "sensor_msgs/msg/Image": "sensor_msgs/msg/Image",
+        "sensor_msgs/msg/Imu": "sensor_msgs/msg/Imu",
         "sensor_msgs/msg/CameraInfo": "sensor_msgs/msg/CameraInfo",
         "sensor_msgs/msg/RegionOfInterest": "sensor_msgs/msg/RegionOfInterest",
         "std_msgs/msg/Header": "std_msgs/msg/Header",
+        "tf2_msgs/msg/TFMessage": "tf2_msgs/msg/TFMessage"
     }
 
-    def get_mapping(self, msg_type: str) -> dict:
+    def get_mapping_2to1(self, msg_type: str) -> dict:
         """
         Given the msg_type string, return a mapping dictionary that describes how to map 
         values from a ros2 message to a ros1 message. Only supports a limited set of 
         message types currently, but can be extended to support more.
+
+        Note that defining mappings of different depths is not allowed, and will
+        break list mapping functionality (i.e. no "header.item1.child1": "header.child1").
 
         Args:
             msg_type (str): The message type string, e.g., "sensor_msgs/msg/Image".
@@ -429,12 +465,12 @@ class rosbag_manipulation():
                 }
             case "geometry_msgs/msg/Pose":
                 map = {
-                    "position": ("position", self.get_mapping("geometry_msgs/msg/Point")),
-                    "orientation": ("orientation", self.get_mapping("geometry_msgs/msg/Quaternion"))
+                    "position": ("position", self.get_mapping_2to1("geometry_msgs/msg/Point")),
+                    "orientation": ("orientation", self.get_mapping_2to1("geometry_msgs/msg/Quaternion"))
                 }
             case "geometry_msgs/msg/PoseWithCovariance":
                 map = {
-                    "pose": ("pose", self.get_mapping("geometry_msgs/msg/Pose")),
+                    "pose": ("pose", self.get_mapping_2to1("geometry_msgs/msg/Pose")),
                     "covariance": "covariance"
                 }
             case "geometry_msgs/msg/Quaternion":
@@ -444,14 +480,25 @@ class rosbag_manipulation():
                     "z": "z",
                     "w": "w"
                 }
+            case "geometry_msgs/msg/Transform":
+                map = {
+                    "translation": ("translation", self.get_mapping_2to1("geometry_msgs/msg/Vector3")),
+                    "rotation": ("rotation", self.get_mapping_2to1("geometry_msgs/msg/Quaternion"))
+                }
+            case "geometry_msgs/msg/TransformStamped":
+                map = {
+                    "header": ("header", self.get_mapping_2to1("std_msgs/msg/Header")),
+                    "child_frame_id": "child_frame_id",
+                    "transform": ("transform", self.get_mapping_2to1("geometry_msgs/msg/Transform")),
+                }
             case "geometry_msgs/msg/Twist":
                 map = {
-                    "linear": ("linear", self.get_mapping("geometry_msgs/msg/Vector3")),
-                    "angular": ("angular", self.get_mapping("geometry_msgs/msg/Vector3"))
+                    "linear": ("linear", self.get_mapping_2to1("geometry_msgs/msg/Vector3")),
+                    "angular": ("angular", self.get_mapping_2to1("geometry_msgs/msg/Vector3"))
                 }
             case "geometry_msgs/msg/TwistWithCovariance":
                 map = {
-                    "twist": ("twist", self.get_mapping("geometry_msgs/msg/Twist")),
+                    "twist": ("twist", self.get_mapping_2to1("geometry_msgs/msg/Twist")),
                     "covariance": "covariance"          
                 }
             case "geometry_msgs/msg/Vector3":
@@ -462,34 +509,44 @@ class rosbag_manipulation():
                 }
             case "nav_msgs/msg/Odometry":
                 map = {
-                    "header": ("header", self.get_mapping("std_msgs/msg/Header")),
+                    "header": ("header", self.get_mapping_2to1("std_msgs/msg/Header")),
                     "child_frame_id": "child_frame_id",
-                    "pose": ("pose", self.get_mapping("geometry_msgs/msg/PoseWithCovariance")),
-                    "twist": ("twist", self.get_mapping("geometry_msgs/msg/TwistWithCovariance"))
+                    "pose": ("pose", self.get_mapping_2to1("geometry_msgs/msg/PoseWithCovariance")),
+                    "twist": ("twist", self.get_mapping_2to1("geometry_msgs/msg/TwistWithCovariance"))
                 }
             case "sensor_msgs/msg/Image":
                 map = {
-                    "header": ("header", self.get_mapping("std_msgs/msg/Header")),
+                    "header": ("header", self.get_mapping_2to1("std_msgs/msg/Header")),
                     "height": "height",
                     "width": "width",
-                    "encoding": "encoding", # Not, this may not map 1-to-1 if encoding strings are different between ROS1/ROS2
+                    "encoding": "encoding",
                     "is_bigendian": "is_bigendian",
                     "step": "step",
                     "data": "data"
                 }
+            case "sensor_msgs/msg/Imu":
+                map = {
+                    "header": ("header", self.get_mapping_2to1("std_msgs/msg/Header")),
+                    "orientation": ("orientation", self.get_mapping_2to1("geometry_msgs/msg/Quaternion")),
+                    "orientation_covariance": "orientation_covariance",
+                    "angular_velocity": ("angular_velocity", self.get_mapping_2to1("geometry_msgs/msg/Vector3")),
+                    "angular_velocity_covariance": "angular_velocity_covariance",
+                    "linear_acceleration": ("linear_acceleration", self.get_mapping_2to1("geometry_msgs/msg/Vector3")),
+                    "linear_acceleration_covariance": "linear_acceleration_covariance"
+                }
             case "sensor_msgs/msg/CameraInfo":
                 map = {
-                    "header": ("header", self.get_mapping("std_msgs/msg/Header")),
+                    "header": ("header", self.get_mapping_2to1("std_msgs/msg/Header")),
                     "height": "height",
                     "width": "width",
-                    "distortion_model": "distortion_model", # May not map 1-to-1 if models differ between ROS1/ROS2
+                    "distortion_model": "distortion_model",
                     "d": "D",
                     "k": "K",
                     "r": "R",
                     "p": "P",
                     "binning_x": "binning_x",
                     "binning_y": "binning_y",
-                    "roi": ("roi", self.get_mapping("sensor_msgs/msg/RegionOfInterest"))
+                    "roi": ("roi", self.get_mapping_2to1("sensor_msgs/msg/RegionOfInterest"))
                 }
             case "sensor_msgs/msg/RegionOfInterest":
                 map = {
@@ -501,16 +558,63 @@ class rosbag_manipulation():
                 }
             case "std_msgs/msg/Header":
                 map = {
-                    "stamp": ("stamp", self.get_mapping("builtin_interfaces/msg/Time")),
+                    "stamp": ("stamp", self.get_mapping_2to1("builtin_interfaces/msg/Time")),
                     "frame_id": "frame_id"
                     # Note: ROS1 msg has a 'seq' value, which we define no mapping for.
                     # Thus, default value in self.get_ros1_msg_instance is used.
+                }
+            case "tf2_msgs/msg/TFMessage":
+                map = {
+                    "transforms": ("transforms", self.get_mapping_2to1("geometry_msgs/msg/TransformStamped"))
                 }
             case _:
                 raise ValueError(f"Currently unsupported msg_type: {msg_type}")
             
         return map
-        
+    
+    def invert_map(self, map: dict) -> dict:
+        """
+        Given an input mapping of values from different ROS verions, flip it so that 
+        the keys are the values and the values are the keys. This equates to converting
+        a mapping from ROS2 to ROS1 into a mapping from ROS1 to ROS2. Handles special
+        cases where the value is a tuple instead of a string.
+
+        Args:
+            map (dict): Dictionary returned by get_mapping_2to1() or get_mapping_1to2()
+
+        Returns:
+            dict: Dictionary with an inverse mapping from before.
+        """
+
+        inverted_map = {}
+        for k, v in map.items():
+            if isinstance(v, tuple) and len(v) == 2:
+                new_key = v[0]
+                new_value = (k, self.invert_map(v[1]))
+            else:
+                new_key = v
+                new_value = k
+            inverted_map[new_key] = new_value
+        return inverted_map
+    
+    def get_mapping_1to2(self, msg_type: str) -> dict:
+        """
+        Same as get_mapping_2to1(), but maps values from a ros1 message to a ros2 message.
+
+        Args:
+            msg_type (str): The message type string, e.g., "sensor_msgs/msg/Image".
+        Returns:
+            dict: A mapping dictionary where:
+                keys (str): A string defining the attribute in the ros2 message.
+                    Thus, a key of "header.stamp" would map to ros2_msg.header.stamp.
+                values (str or tuple): A string defining the attribute in the ros1 message,
+                    OR a tuple where the first element is the attribute in the ros1 message and
+                    the second element is a mapping dictionary for mapping attributes within 
+                    child message types.
+        """
+
+        map = self.get_mapping_2to1(msg_type)
+        return self.invert_map(map)
         
     def solve_for_all_mappings(self, map: dict[str, str | tuple] | None, msg_type: str | None) -> dict:
         """
@@ -541,7 +645,7 @@ class rosbag_manipulation():
         # Check input parameters
         if map is None and msg_type is not None:
             # If no map is provided, we need to generate it from the msg_type
-            map = self.get_mapping(msg_type)
+            map = self.get_mapping_2to1(msg_type)
         elif map is None and msg_type is None:
             raise ValueError("No map provided and no msg_type specified to generate initial map.")
         elif map is not None and msg_type is not None:
@@ -559,7 +663,6 @@ class rosbag_manipulation():
                 # Solve recursively to only get values with type "list" in the child map
                 child_map = self.solve_for_all_mappings(child_map, None)
 
-
                 # Now, take child map and bring it into the current map
                 for child_key in child_map:
                     new_key = '.'.join(key.split('.') + child_key.split('.'))
@@ -570,7 +673,39 @@ class rosbag_manipulation():
                 del map[key]
         return map
     
-    def get_ros1_msg_instance(self, msg_type: str) -> object:
+    def get_default_param(self, type_str: str, ros2_msg_attr: object):
+        """
+        This method will inspect the type provided in type_str and
+        return a default value to use in the instanciated ROS1 msg.
+        If no mapping is defined for this value from the ROS2 msg, 
+        this will be the final value.
+
+        Args:
+            type_str (str): The attribute type to get a default value
+                for.
+            ros2_msg_attr (object): The ROS2 object that corresponds
+                to this parameter, if it exists. Is used to determine
+                list sizes in get_ros1_msg_instance().
+        """
+
+        if type_str == "<class 'inspect._empty'>" or type_str == 'ClassVar[str]':
+            pass
+        elif type_str == "int":
+            return 0
+        elif type_str == "str":
+            return ""
+        elif type_str == "bool":
+            return False
+        elif type_str == "float":
+            return 0.0
+        elif "np.ndarray" in type_str:
+            return np.array([])
+        elif "msg" in type_str:
+            return self.get_ros1_msg_instance("/".join(type_str.split('__')), ros2_msg_attr)
+        else:
+            raise NotImplementedError(f"Unspecified default value: {type_str}")
+
+    def get_ros1_msg_instance(self, msg_type: str, ros2_msg: object | None) -> object:
         """
         Get a ROS1 message instance with all values filled with defaults.
         This allows us to easily add attributes later on, instead of needing
@@ -578,42 +713,148 @@ class rosbag_manipulation():
 
         Args:
             msg_type (str): The type of message to initialize a ROS1 msg class for.
+            ros2_msg (object | None): The ros2_msg that corresponds to the ros1 msg instance
+                we want to build. Only used if message contains a list, so that the 
+                ros1 msg can have a list of the same size. Set to none if it doesn't exist.
 
         Returns:
             object: The initialized ROS1 class message.
         """
 
+        # If we've already made an instance, return it
+        try:
+            # Doesn't work for messages with lists, as list size might vary
+            if msg_type != 'tf2_msgs/msg/TFMessage':
+                return pickle.loads(self.ros1_msg_instances[msg_type])
+        except:
+            pass
+
         # Initialize the ros1_msg class
         ros1_msg_class = self.typestore1.types[self.msg_mapping_ros2_to_ros1[msg_type]]
+
+        # Get the ros1 to ros2 mapping
+        map1to2 = self.get_mapping_1to2(msg_type)
 
         # Get the signature of the __init__ method
         sig = inspect.signature(ros1_msg_class.__init__)
 
-        # Set default values based on parameter type
+        # Set default values
         initial_parameters = []
         for name, param in sig.parameters.items():
+
+            # Skip 'self' as it needs no default value
+            if name == 'self':
+                continue
+
+            # Get the ros2 object for this parameter
+            try:
+                name_ros2 = map1to2[name]
+                if type(name_ros2) == tuple:
+                    name_ros2 = name_ros2[0]
+                ros2_msg_attr = getattr(ros2_msg, name_ros2)
+            except: # No matching ros2 mapping
+                ros2_msg_attr = None
+
+            # Get the type of this parameter
             type_str = str(param.annotation)
-            if type_str == "<class 'inspect._empty'>" or type_str == 'ClassVar[str]':
-                pass
-            elif type_str == "int":
-                initial_parameters.append(0)
-            elif type_str == "str":
-                initial_parameters.append("")
-            elif type_str == "bool":
-                initial_parameters.append(False)
-            elif type_str == "float":
-                initial_parameters.append(0.0)
-            elif "np.ndarray" in type_str:
-                initial_parameters.append(np.array([]))
-            elif "msg" in type_str:
-                initial_parameters.append(self.get_ros1_msg_instance("/".join(type_str.split('__'))))
-            else:
-                raise NotImplementedError(f"Unspecified default value: {type_str}")
+
+            # If it is a list, add as many default values to list as needed
+            if "list" in type_str:
+
+                # Make sure there aren't nested lists
+                type_str_child = type_str[5:-1]
+                if "list" in type_str_child:
+                    raise NotImplementedError("ROS Messages with nested lists are not supported.")
+
+                # Find the number of items in the corresponding list in the ros2 message
+                if ros2_msg_attr is not None:
+                    list_size = len(ros2_msg_attr)
+                else:
+                    # There is no matching value in ros2 message to pass.
+                    # Thus, just append an empty list
+                    initial_parameters.append([])
+
+                # Add the child item as many times as necessary
+                list = []
+                for i in range(0, list_size):
+                    list.append(self.get_default_param(type_str_child, ros2_msg_attr))
+                initial_parameters.append(list)
+            
+            # Otherwise, just add the default value once
+            else: 
+                initial_parameters.append(self.get_default_param(type_str, ros2_msg_attr))
 
         # Initialize class with dummy values
-        return ros1_msg_class(*initial_parameters)
+        instance = ros1_msg_class(*initial_parameters)
 
+        # If possible (msg doesn't have lists), save it so we can reuse it next time
+        if msg_type != "tf2_msgs/msg/TFMessage":
+            # Dump it to a pickle object for deep copying later, but do it now for speed
+            self.ros1_msg_instances[msg_type] = pickle.dumps(instance)
+        return instance
 
+    def iterate_and_assign(self, ros2_attr_list: list[str], ros1_attr_list: list[str], 
+                           ros2_obj: object, ros1_obj: object, msg_type: str):
+        """
+        Given attribute lists and corresponding ROS msg objects, isolate the 
+        individual final attributes and assign the ros2 value to the ros1 
+        value. Handles edge cases where attributes are lists.
+
+        Args:
+            ros2_attr_list (list): list of strings defining path of attributes
+                from current ros2_obj to final attribute to use as new value
+                for corresponding ros1_boj final attribute.
+            ros1_attr_list (list): list of strings defining path of attributes
+                from current ros1_obj to final attribute to assign with a new
+                value from the ros2_obj.
+            ros2_obj (object): The ROS2 object that contains the attribute to use.
+            ros1_obj (object): The ROS1 object that contains the attribute to assign.
+            msg_type (str): Holds the msg_type when this method was called the
+                first time (non-recursively). Only used for an error message.
+
+        """
+        # See if either attr_list has a list object in it
+        list_found_2, list_found_1 = False, False
+
+        # Iterate down to the base attribute in each message
+        depth_ros2, depth_ros1 = 0, 0
+        while len(ros2_attr_list) > 1 and not list_found_2:
+            ros2_obj = getattr(ros2_obj, ros2_attr_list[0])
+            if type(ros2_obj) == list:
+                list_found_2 = True
+            ros2_attr_list = ros2_attr_list[1:]
+            depth_ros2 += 1
+
+        while len(ros1_attr_list) > 1 and not list_found_1:
+            ros1_obj = getattr(ros1_obj, ros1_attr_list[0])
+            if type(ros1_obj) == list:
+                list_found_1 = True
+            ros1_attr_list = ros1_attr_list[1:]
+            depth_ros1 += 1
+
+        # If a list was found, see if we can still assign
+        if list_found_2 or list_found_1:
+            # Double check both objects are currently lists
+            if type(ros1_obj) != list or type(ros2_obj) != list:
+                raise RuntimeError("Attempting to assign list object to single object (or visa versa). Double check mappings in get_mapping_2to1().")
+
+            # Double check list objects are at same depth
+            if depth_ros1 != depth_ros2:
+                raise RuntimeError("List attributes found at different depths; this should not happen. Make sure there are no map assignments with varying depth in get_mapping_2to1().")
+            
+            # Call this method recursively for each time we need to set the object
+            for i in range(0, len(ros1_obj)):
+                self.iterate_and_assign(ros2_attr_list, ros1_attr_list, ros2_obj[i], ros1_obj[i], msg_type)
+
+        # Otherwise, assign the value as normal
+        else:
+            # Make sure the attribute we're about to set has a default value (and thus exists)
+            if hasattr(ros1_obj, ros1_attr_list[0]):
+                # If so, set it
+                setattr(ros1_obj, ros1_attr_list[0], getattr(ros2_obj, ros2_attr_list[0]))
+            else:
+                raise Exception(f"Attribute '{ros1_attr_list[0]}' to set somewhere in {msg_type} doesn't exist! Double check values in self.get_mapping_2to1().")
+        
     def map_ros2_to_ros1(self, ros2_msg: object, msg_type: str) -> object:
         """
         Map a ROS2 message to a ROS1 message based on the provided message type.
@@ -627,8 +868,8 @@ class rosbag_manipulation():
         """
 
         # Get ros1 message class
-        ros1_msg = self.get_ros1_msg_instance(msg_type)
-        
+        ros1_msg = self.get_ros1_msg_instance(msg_type, ros2_msg)
+
         # Map attributes from ros2_msg to ros1_msg
         for ros2_attr_str, ros1_attr_str in self.solve_for_all_mappings(None, msg_type).items():
             ros2_attr_list = ros2_attr_str.split('.')
@@ -637,21 +878,9 @@ class rosbag_manipulation():
             # Map each message to temporary objects
             ros2_obj = ros2_msg
             ros1_obj = ros1_msg
-
-            # Iterate down to the base attribute in each message
-            while len(ros2_attr_list) > 1:
-                ros2_obj = getattr(ros2_obj, ros2_attr_list[0])
-                ros2_attr_list = ros2_attr_list[1:]
-
-            while len(ros1_attr_list) > 1:
-                ros1_obj = getattr(ros1_obj, ros1_attr_list[0])
-                ros1_attr_list = ros1_attr_list[1:]
-
-            # Make sure the attribute we're about to set already has a value
-            if hasattr(ros1_obj, ros1_attr_list[0]):
-                setattr(ros1_obj, ros1_attr_list[0], getattr(ros2_obj, ros2_attr_list[0]))
-            else:
-                raise Exception(f"Attribute '{ros1_attr_list[0]}' to set doesn't exist! Double check values in self.get_mapping().")
+            
+            # Iterate through this attribute and any child messages and assign values
+            self.iterate_and_assign(ros2_attr_list, ros1_attr_list, ros2_obj, ros1_obj, msg_type)
         
         return ros1_msg
 
@@ -725,4 +954,5 @@ class rosbag_manipulation():
                         # Write the message to the ROS1 bag
                         writer.write(conn_map[conn.topic], timestamp, rawdata)
                         pbarW.update(1)
+
 

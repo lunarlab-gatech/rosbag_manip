@@ -1,2 +1,9 @@
 # Ignore generated figures
 figures/
+
+# Ignore coverage files
+.coverage
+htmlcov/
+
+# Ignore profile output
+profile.out
