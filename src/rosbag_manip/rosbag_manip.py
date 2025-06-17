@@ -205,6 +205,11 @@ class rosbag_manipulation():
         hertz_diffs = [topic_timestamps[i] - topic_timestamps[i - 1] for i in range(1, len(topic_timestamps))]
         hertz_values = [1 / diff for diff in hertz_diffs if diff > 0]
 
+        # Output a message if some differences are zero
+        num_seq_messages_with_same_timestamps = len([x for x in hertz_diffs if x == 0])
+        if num_seq_messages_with_same_timestamps > 0:
+            print(f"Warning: Sequential Pairs of timestamps are equivalent {num_seq_messages_with_same_timestamps} times. Excluding from plot...")
+
         # Sort each of these lists
         hertz_diffs.sort()
         hertz_values.sort()
@@ -242,6 +247,10 @@ class rosbag_manipulation():
         Downsample a ROS2 bag file by downsampling the frequency of specified topics. Additionally
         includes or excludes unmentioned topics based on `include_unmentioned_topics` parameter, which
         can be used to prune topics.
+         
+        If the number of msgs on a topic multiplied by the downsample ratio is not an integer
+        (ex. 696 * 0.1 = 69.6), then the number of messages will be the nearest integer of the 
+        calculated float (ex. np.round(69.6) == 70).
 
         Used Attributes:
             self.input_bag (str): Path to the input ROS2 bag file.
@@ -258,19 +267,39 @@ class rosbag_manipulation():
         output_bag = Path(self.output_bag)
 
         # Extract operation specific parameters
-        topic_downsample_ratios: dict = self.operation_params['downsample']['topics']
+        topic_downsample_ratios: dict = self.operation_params['downsample']['topics'].copy()
         include_unmentioned_topics: bool = self.operation_params['downsample']['include_unmentioned_topics']
 
         # Ensure we aren't overwriting an existing output bag
         if output_bag.exists():
             raise AssertionError("Delete Output Directory first!")
         
-        # Calculate downsample ratios
+        # Check for valid input downsample ratios
         for topic in topic_downsample_ratios:
-            if topic_downsample_ratios[topic] <= 0:
-                raise ValueError("Downsample rates must be greater than 0.")
-            topic_downsample_ratios[topic] = 1 / topic_downsample_ratios[topic]
+            ratio = topic_downsample_ratios[topic]
+            if ratio <= 0 or ratio > 1:
+                raise ValueError("Downsample rates must be >0 and <= 1")
 
+        # Open the metadata.yaml file and get number of messages on each of the topics
+        metadata_path = Path(self.input_bag / 'metadata.yaml')
+        if not metadata_path.exists():
+            raise FileNotFoundError(f"Unable to find metadata.yaml in ROS2 bag: {metadata_path}")
+        with open(metadata_path, 'r') as f:
+            metadata = yaml.safe_load(f)
+
+        topic_counts = {}
+        for topic_info in metadata.get('rosbag2_bagfile_information').get('topics_with_message_count'):
+            topic_name = topic_info['topic_metadata']['name']
+            message_count = topic_info['message_count']
+            topic_counts[topic_name] = message_count
+
+        # Calculate which messages we want to save for each topic
+        indicies_to_save = {}
+        for topic in topic_counts:
+            if topic in topic_downsample_ratios:
+                desired_final_count = int(np.round(topic_counts[topic] * topic_downsample_ratios[topic]))
+                indicies_to_save[topic] = np.linspace(0, topic_counts[topic] - 1, num=desired_final_count, dtype=int).tolist()
+                
         # Open the bag
         with Reader2(input_bag) as reader:
             connections = reader.connections
@@ -292,7 +321,7 @@ class rosbag_manipulation():
                 # Initialize counters for each topic
                 topic_counters = defaultdict(int)
                 for topic in topic_downsample_ratios:
-                    topic_counters[topic] = 1
+                    topic_counters[topic] = 0
 
                 # Setup progress bars
                 pbarC = tqdm.tqdm(total=None, desc="Downsampling Requested Messages", unit=" messages")
@@ -306,21 +335,9 @@ class rosbag_manipulation():
                     if (conn.topic in topic_downsample_ratios) or include_unmentioned_topics:
                         pbarC.update(1)
 
-                        # Extract the downsample ratio for this topic
-                        try:
-                            downsample_ratio = topic_downsample_ratios[conn.topic]
-                        except KeyError:
-                            # Assume no downsampling for unmentioned topics
-                            downsample_ratio = 1.0
-
                         # See if we need to save this message or cut it
-                        if topic_counters[conn.topic] >= topic_downsample_ratios[conn.topic]:
+                        if topic_counters[conn.topic] in indicies_to_save[conn.topic]:
                             pbarW.update(1)
-
-                            # Subtract integer portion of count
-                            topic_counters[conn.topic] -= topic_downsample_ratios[conn.topic]
-                            
-                            # Write the raw data
                             writer.write(conn_map[conn.topic], timestamp, rawdata)
 
                         # Increment the counter for this topic
@@ -937,4 +954,5 @@ class rosbag_manipulation():
                         # Write the message to the ROS1 bag
                         writer.write(conn_map[conn.topic], timestamp, rawdata)
                         pbarW.update(1)
+
 
