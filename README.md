@@ -71,3 +71,22 @@ Note that support for more messages can be easily added by altering `get_mapping
 "std_msgs/msg/Header"
 "tf2_msgs/msg/TFMessage"
 ```
+
+## Validation
+
+### Unit Tests & Coverage
+
+Run the following command to run the unit tests and generate a code coverage report:
+```
+coverage run --source rosbag_manip -m unittest discover tests/ -v
+coverage report
+coverage html
+```
+
+### Profiling
+
+Run the following command to profile the code (via the unit tests):
+```
+python -m cProfile -o profile.out -m unittest discover tests/ -v
+snakeviz profile.out
+```

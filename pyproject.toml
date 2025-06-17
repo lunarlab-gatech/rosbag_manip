@@ -15,6 +15,7 @@ dependencies = ["coverage",
                 "matplotlib",
                 "numpy",
                 "rosbags",
+                "snakeviz",
                 "tqdm",
                 "typer",
                 "pyyaml"]
