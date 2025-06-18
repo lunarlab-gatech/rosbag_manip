@@ -421,6 +421,7 @@ class rosbag_manipulation():
         "geometry_msgs/msg/TwistWithCovariance": "geometry_msgs/msg/TwistWithCovariance",
         "geometry_msgs/msg/Vector3": "geometry_msgs/msg/Vector3",
         "nav_msgs/msg/Odometry": "nav_msgs/msg/Odometry",
+        "rosgraph_msgs/msg/Clock": "rosgraph_msgs/msg/Clock",
         "sensor_msgs/msg/Image": "sensor_msgs/msg/Image",
         "sensor_msgs/msg/Imu": "sensor_msgs/msg/Imu",
         "sensor_msgs/msg/CameraInfo": "sensor_msgs/msg/CameraInfo",
@@ -513,6 +514,10 @@ class rosbag_manipulation():
                     "child_frame_id": "child_frame_id",
                     "pose": ("pose", self.get_mapping_2to1("geometry_msgs/msg/PoseWithCovariance")),
                     "twist": ("twist", self.get_mapping_2to1("geometry_msgs/msg/TwistWithCovariance"))
+                }
+            case "rosgraph_msgs/msg/Clock":
+                map = {
+                    "clock": ("clock", self.get_mapping_2to1("builtin_interfaces/msg/Time"))
                 }
             case "sensor_msgs/msg/Image":
                 map = {

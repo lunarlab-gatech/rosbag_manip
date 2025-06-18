@@ -30,9 +30,9 @@ class TestRosbagManip(unittest.TestCase):
 
         # Download the test bag (as its too big for GitHub)
         if not os.path.isfile(path_hercules_bag_db3):
-            TestRosbagManip.safe_urlretrieve("https://www.dropbox.com/scl/fi/2flzok4kwb42no4vqr0ie/hercules_test_bag_pruned_3.db3?rlkey=8yj3sbo3vp96513qvxh26q0di&st=kxhx3hep&dl=1", path_hercules_bag_db3)
+            TestRosbagManip.safe_urlretrieve("https://www.dropbox.com/scl/fi/r3qxkbypaiq3o277qu9ad/hercules_test_bag_pruned_3.db3?rlkey=uumrmpt80elj2gjhqls6027pm&st=4g498h35&dl=1", path_hercules_bag_db3)
         if not os.path.isfile(path_hercules_bag_yaml):
-            TestRosbagManip.safe_urlretrieve("https://www.dropbox.com/scl/fi/94jshmjb5l3lcb71g64yq/metadata.yaml?rlkey=we4ex9bpd81shjtxkvm1gfl26&st=9o4evtni&dl=1", path_hercules_bag_yaml)
+            TestRosbagManip.safe_urlretrieve("https://www.dropbox.com/scl/fi/alze2h2e3h4l09f55uka9/metadata.yaml?rlkey=may9dvginz3bg6gsgtgcod3m7&st=ypw42mhh&dl=1", path_hercules_bag_yaml)
 
     @staticmethod
     def count_msgs_in_ros2_bag(bag_path: Path) -> dict:
@@ -90,6 +90,12 @@ class TestRosbagManip(unittest.TestCase):
             connections2 = [x for x in reader2.connections if x.topic == topic]
             for conn2, timestamp2, rawdata2 in reader2.messages(connections=connections2):
                 ros2_msgs.append(typestore2.deserialize_cdr(rawdata2, conn2.msgtype))
+
+        # Make sure that there is at least one messages to check
+        np.testing.assert_raises(AssertionError, np.testing.assert_equal, len(ros2_msgs), 0)
+
+        # Make sure the number of messages between bags match
+        np.testing.assert_equal(len(ros1_msgs), len(ros2_msgs))
 
         # Check each of the attributes depending on topic
         for i in range(0, len(ros1_msgs)):
@@ -181,6 +187,9 @@ class TestRosbagManip(unittest.TestCase):
                     np.testing.assert_equal(trans1.transform.rotation.y, trans2.transform.rotation.y)
                     np.testing.assert_equal(trans1.transform.rotation.z, trans2.transform.rotation.z)
                     np.testing.assert_equal(trans1.transform.rotation.w, trans2.transform.rotation.w)
+            elif topic == '/clock':
+                np.testing.assert_equal(msg1.clock.sec, msg2.clock.sec)
+                np.testing.assert_equal(msg1.clock.nanosec, msg2.clock.nanosec)
             else:
                 raise NotImplementedError(f"Tests are not implemented for this topic: {topic}")
 
@@ -318,6 +327,7 @@ class TestRosbagManip(unittest.TestCase):
         self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/hercules_node/Drone2/imu/imu')
         self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/tf_static')
         self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/tf')
+        self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/clock')
 
 if __name__ == "__main__":
     unittest.main()
