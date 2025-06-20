@@ -90,3 +90,10 @@ Run the following command to profile the code (via the unit tests):
 python -m cProfile -o profile.out -m unittest discover tests/ -v
 snakeviz profile.out
 ```
+
+## Other potentially useful packages
+```
+https://github.com/tier4/ros2bag_extensions
+https://ternaris.gitlab.io/rosbags/topics/convert.html#
+https://github.com/ros2/rosbag2
+```

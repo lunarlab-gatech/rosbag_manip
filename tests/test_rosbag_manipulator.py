@@ -62,12 +62,16 @@ class TestRosbagManip(unittest.TestCase):
             RuntimeError - If the recieved content is html.
         """
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        with urllib.request.urlopen(url) as response:
+        with urllib.request.urlopen(url, timeout=10) as response:
             content_type = response.headers.get('Content-Type', '')
             if 'text/html' in content_type:
                 raise RuntimeError(f"Failed to download {url}: received HTML instead of the expected file")
             with open(dest_path, 'wb') as out_file:
-                out_file.write(response.read())
+                while True:
+                    chunk = response.read(8192)
+                    if not chunk:
+                        break
+                    out_file.write(chunk)
 
     def assert_two_msgs_match(self, ros1_bag: Path, ros2_bag: Path, topic: str):
         """

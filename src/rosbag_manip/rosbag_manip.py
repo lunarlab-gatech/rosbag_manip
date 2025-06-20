@@ -238,6 +238,32 @@ class rosbag_manipulation():
             filename=Path(output_folder, f'{robot_str}_{topic.replace("/", "_")}_HERTZ.png')
         )
 
+    # def view_imu_data(self):
+    #     # Extract operation specific parameters
+    #     output_folder: str = self.operation_params['hertz_analysis']['output_folder']
+
+    #     # Convert string to Path object
+    #     input_path = Path(self.input_bag)
+
+    #     # Open the bag file for reading
+    #     x, y, z = [], [], []
+    #     with Reader2(input_path) as reader:
+    #         # Store timestamps
+    #         topic_timestamps = []
+
+    #         # setup tqdm 
+    #         pbar = tqdm.tqdm(total=None, desc="Extracting timestamps", unit="frames")
+
+    #         # Only analyze the specified topic
+    #         connections = [x for x in reader.connections if x.topic == topic]
+    #         for conn, timestamp, rawdata in reader.messages(connections=connections):
+    #             topic = conn.topic
+    #             msg = self.typestore2.deserialize_cdr(rawdata, conn.msgtype)
+    #             x.append(msg.linear_acceleration.x)
+    #             y.append(msg.linear_acceleration.y)
+    #             z.append(msg.linear_acceleration.z)
+    #             pbar.update(1)
+
     # =========================================================================
     # ============================= Downsampling ==============================
     # ========================================================================= 
@@ -269,6 +295,8 @@ class rosbag_manipulation():
         # Extract operation specific parameters
         topic_downsample_ratios: dict = self.operation_params['downsample']['topics'].copy()
         include_unmentioned_topics: bool = self.operation_params['downsample']['include_unmentioned_topics']
+        if include_unmentioned_topics:
+            raise NotImplementedError('Logic for this isnt fully tested')
 
         # Ensure we aren't overwriting an existing output bag
         if output_bag.exists():
@@ -281,7 +309,7 @@ class rosbag_manipulation():
                 raise ValueError("Downsample rates must be >0 and <= 1")
 
         # Open the metadata.yaml file and get number of messages on each of the topics
-        metadata_path = Path(self.input_bag / 'metadata.yaml')
+        metadata_path = Path(input_bag / 'metadata.yaml')
         if not metadata_path.exists():
             raise FileNotFoundError(f"Unable to find metadata.yaml in ROS2 bag: {metadata_path}")
         with open(metadata_path, 'r') as f:
@@ -298,7 +326,7 @@ class rosbag_manipulation():
         for topic in topic_counts:
             if topic in topic_downsample_ratios:
                 desired_final_count = int(np.round(topic_counts[topic] * topic_downsample_ratios[topic]))
-                indicies_to_save[topic] = np.linspace(0, topic_counts[topic] - 1, num=desired_final_count, dtype=int).tolist()
+                indicies_to_save[topic] = set(np.linspace(0, topic_counts[topic] - 1, num=desired_final_count, dtype=int).tolist())
                 
         # Open the bag
         with Reader2(input_bag) as reader:
@@ -308,7 +336,7 @@ class rosbag_manipulation():
             with Writer2(output_bag, version=5) as writer:
                 conn_map = {}
                 for conn in connections:
-                    if conn.topic in topic_downsample_ratios:
+                    if (conn.topic in topic_downsample_ratios) or include_unmentioned_topics:
                         conn_map[conn.topic] = writer.add_connection(
                             topic=conn.topic,
                             msgtype=conn.msgtype,
@@ -324,24 +352,26 @@ class rosbag_manipulation():
                     topic_counters[topic] = 0
 
                 # Setup progress bars
-                pbarC = tqdm.tqdm(total=None, desc="Downsampling Requested Messages", unit=" messages")
+                pbarC = tqdm.tqdm(total=None, desc="Reading Requested Messages", unit=" messages")
                 pbarW = tqdm.tqdm(total=None, desc="Writing Messages", unit=" messages")
 
+                # Iterate through reader only through desired topics
+                if include_unmentioned_topics:
+                    connections = reader.connections
+                else:
+                    connections = [x for x in reader.connections if x.topic in conn_map]
+
                 # Interate through messages in the bag
-                connections = [x for x in reader.connections if x.topic in conn_map]
                 for conn, timestamp, rawdata in reader.messages(connections=connections):
+                    pbarC.update(1)
 
-                    # Check its a topic we want to write
-                    if (conn.topic in topic_downsample_ratios) or include_unmentioned_topics:
-                        pbarC.update(1)
+                    # See if we need to save this message or cut it
+                    if topic_counters[conn.topic] in indicies_to_save[conn.topic]:
+                        pbarW.update(1)
+                        writer.write(conn_map[conn.topic], timestamp, rawdata)
 
-                        # See if we need to save this message or cut it
-                        if topic_counters[conn.topic] in indicies_to_save[conn.topic]:
-                            pbarW.update(1)
-                            writer.write(conn_map[conn.topic], timestamp, rawdata)
-
-                        # Increment the counter for this topic
-                        topic_counters[conn.topic] += 1
+                    # Increment the counter for this topic
+                    topic_counters[conn.topic] += 1
 
                 # Close the progress bars
                 pbarC.close()
