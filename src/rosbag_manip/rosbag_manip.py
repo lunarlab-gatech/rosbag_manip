@@ -12,6 +12,7 @@ from rosbags.rosbag2 import Reader as Reader2
 from rosbags.rosbag2 import Writer as Writer2
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from rosbags.typesys.store import Typestore
+from scipy.spatial.transform import Rotation as R
 import tqdm
 import yaml
 
@@ -238,31 +239,150 @@ class rosbag_manipulation():
             filename=Path(output_folder, f'{robot_str}_{topic.replace("/", "_")}_HERTZ.png')
         )
 
-    # def view_imu_data(self):
-    #     # Extract operation specific parameters
-    #     output_folder: str = self.operation_params['hertz_analysis']['output_folder']
+    # =========================================================================
+    # ============================ View IMU Data ==============================
+    # ========================================================================= 
 
-    #     # Convert string to Path object
-    #     input_path = Path(self.input_bag)
 
-    #     # Open the bag file for reading
-    #     x, y, z = [], [], []
-    #     with Reader2(input_path) as reader:
-    #         # Store timestamps
-    #         topic_timestamps = []
+    def view_imu_data(self):
+        """
+        Plot the linear acceleration data of an IMU topic in a ROS2 bag.
 
-    #         # setup tqdm 
-    #         pbar = tqdm.tqdm(total=None, desc="Extracting timestamps", unit="frames")
+        Used Attributes:
+            self.input_bag (str): Path to the input ROS2 bag file.
+            self.operation_params (dict): Dictionary containing operation parameters, including:
+                - 'view_imu_data': Dictionary with keys:
+                    - 'topic': The topic to read the IMU data from; must be 'sensor_msgs/msg/Imu'.
+                    - 'output_folder': The folder to save plotted IMU data.
+                    - 'expected_msgs': Expected number of messages in the topic, for progress bar.
+                            Optional.
+        """
 
-    #         # Only analyze the specified topic
-    #         connections = [x for x in reader.connections if x.topic == topic]
-    #         for conn, timestamp, rawdata in reader.messages(connections=connections):
-    #             topic = conn.topic
-    #             msg = self.typestore2.deserialize_cdr(rawdata, conn.msgtype)
-    #             x.append(msg.linear_acceleration.x)
-    #             y.append(msg.linear_acceleration.y)
-    #             z.append(msg.linear_acceleration.z)
-    #             pbar.update(1)
+        # Extract operation specific parameters
+        topic: str = self.operation_params['view_imu_data']['topic']
+        output_folder: str = self.operation_params['view_imu_data']['output_folder']
+        try: expected_msgs: int = self.operation_params['view_imu_data']['expected_msgs']
+        except: expected_msgs = None
+        try: 
+            data_range = self.operation_params['view_imu_data']['data_range']
+            assert len(data_range) == 2
+            data_range = tuple(data_range)
+        except: data_range = None
+
+        # Create the output folder if it doesn't exist
+        Path(output_folder).mkdir(parents=True, exist_ok=True)
+
+        # Check if we've already parsed the bag into a .npy file
+        npy_path = Path(output_folder) / "imu_data.npy"
+        if npy_path.exists():
+            
+            # If so, load the cached data
+            data = np.load(npy_path, allow_pickle=True).item()
+            timestamps = data['timestamps']
+            lin_accel = data['lin_accel']
+            ang_vel = data['ang_vel']
+            orientation = data['orientation']
+
+        else: # Otherwise, read the bag
+
+            # Convert string to Path object
+            input_path = Path(self.input_bag)
+            
+            # Initialize lists
+            lin_accel = {'x': [], 'y': [], 'z': []}
+            ang_vel = {'x': [], 'y': [], 'z': []}
+            orientation = {'x': [], 'y': [], 'z': [], 'w': []}
+            timestamps = []
+
+            # Open the bag file for reading
+            with Reader2(input_path) as reader:
+
+                # setup tqdm 
+                pbar = tqdm.tqdm(total=expected_msgs, desc="Extracting IMU Data", unit=" frames")
+
+                # Only analyze the specified topic
+                connections = [x for x in reader.connections if x.topic == topic]
+                if len(connections) != 1:
+                    raise ValueError("Input topic doesn't exist in bag!")
+
+                # Iterate through messages
+                for conn, timestamp, rawdata in reader.messages(connections=connections):
+                    msg = self.typestore2.deserialize_cdr(rawdata, conn.msgtype)
+                    
+                    # Timestamp
+                    timestamps.append(Decimal(msg.header.stamp.sec) + Decimal(msg.header.stamp.nanosec) * Decimal(1e-9))
+
+                    # Linear acceleration
+                    lin_accel['x'].append(msg.linear_acceleration.x)
+                    lin_accel['y'].append(msg.linear_acceleration.y)
+                    lin_accel['z'].append(msg.linear_acceleration.z)
+
+                    # Angular velocity
+                    ang_vel['x'].append(msg.angular_velocity.x)
+                    ang_vel['y'].append(msg.angular_velocity.y)
+                    ang_vel['z'].append(msg.angular_velocity.z)
+
+                    # Orientation
+                    orientation['x'].append(msg.orientation.x)
+                    orientation['y'].append(msg.orientation.y)
+                    orientation['z'].append(msg.orientation.z)
+                    orientation['w'].append(msg.orientation.w)
+
+                    pbar.update(1)
+
+            # Convert quaternions into euler angles
+            quaternions = np.array([ orientation['x'], orientation['y'],
+                orientation['z'], orientation['w']]).T 
+            euler_angles = R.from_quat(quaternions).as_euler('xyz', degrees=True)
+            orientation = {'roll': euler_angles[:, 0], 'pitch': euler_angles[:, 1], 'yaw': euler_angles[:, 2]}
+
+            # Save extracted data into a .npy file
+            np.save(Path(output_folder) / "imu_data.npy", {
+                'timestamps': timestamps,
+                'lin_accel': lin_accel,
+                'ang_vel': ang_vel,
+                'orientation': orientation,
+            })
+            
+        def multi_list_plotter(data_dict: dict, timestamps: list, data_range: tuple[int], title: str, ylabel: str, filename: str):
+            """
+            Helper function that plots each list in a dictionary in its own subplot,
+            all in a single matplotlib figure.
+            """
+
+            num_plots = len(data_dict)
+            fig, axes = plt.subplots(num_plots, 1, figsize=(10, 3 * num_plots), sharex=True)
+
+            # Make it a list always
+            if num_plots == 1:
+                axes = [axes]
+
+            shift = timestamps[0]
+            for i in range(0, len(timestamps)):
+                timestamps[i] -= shift
+
+            if data_range is not None:
+                timestamps = timestamps[data_range[0]:data_range[1]]
+
+            for ax, (key, values) in zip(axes, data_dict.items()):
+                if data_range is not None:
+                    values = values[data_range[0]:data_range[1]]
+                ax.plot(timestamps, values, label=key)
+                ax.set_ylabel(f"{key} - ({ylabel})")
+                ax.grid(True)
+                ax.legend(loc='upper right')
+
+            axes[-1].set_xlabel("Time (s)")
+            fig.suptitle(f"{title} vs Time", fontsize=14)
+            fig.tight_layout(rect=[0, 0.03, 1, 0.95])
+            plt.savefig(str(Path(output_folder) / filename))
+            plt.close()
+
+        # Create all plots
+        multi_list_plotter(lin_accel, timestamps, data_range, "Linear Acceleration", "m/s^2", "linear_acceleration.png")
+        multi_list_plotter(ang_vel, timestamps, data_range, "Angular Velocity", "rad/s", "angular_velocity.png")
+        multi_list_plotter(orientation, timestamps, data_range, "Orientation", "degrees", "orientation.png")
+
 
     # =========================================================================
     # ============================= Downsampling ==============================
