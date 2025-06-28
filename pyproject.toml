@@ -18,7 +18,9 @@ dependencies = ["coverage",
                 "scipy",
                 "snakeviz",
                 "tqdm",
+                "typeguard",
                 "typer",
+                "pandas",
                 "pyyaml"]
 
 # == License information TBD ==

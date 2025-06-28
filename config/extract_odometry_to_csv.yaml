@@ -1,0 +1,8 @@
+input_bag: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_pruned
+external_msgs_path_ros2: /home/dbutterfield3/Research/rosbag_manip/external_msgs_ros2
+external_msgs_path_ros1: /home/dbutterfield3/Research/rosbag_manip/external_msgs_ros1
+operation_to_run: extract_odometry_to_csv
+operation_params:
+  extract_odometry_to_csv:
+    topic: /hercules_node/Husky1/ground_truth/odom_local
+    output_file: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_prunedExtract/Husky1_odom.csv

@@ -1,7 +1,9 @@
 import os
 import numpy as np
+import pandas as pd
 from pathlib import Path
 from rosbag_manip import rosbag_manipulation
+from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag1 import Reader as Reader1
 from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys import Stores, get_typestore
@@ -79,9 +81,8 @@ class TestRosbagManip(unittest.TestCase):
         """
         
         # Setup Typestores
-        stores = self.manipulator.create_typestores_with_external_msgs()
-        typestore1 = stores[0]
-        typestore2 = stores[1]
+        typestore1 = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS1_NOETIC, self.path_external_msgs_ros1)
+        typestore2 = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS2_HUMBLE, self.path_external_msgs_ros2)
 
         # Load all messages of the specified type
         ros1_msgs, ros2_msgs = [], []
@@ -332,6 +333,109 @@ class TestRosbagManip(unittest.TestCase):
         self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/tf_static')
         self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/tf')
         self.assert_two_msgs_match(path_hercules_bag_ros1, self.path_hercules_bag, '/clock')
+    
+    def test_extract_odometry_to_csv(self):
+        # Setup a dictionary with configuration parameters 
+        output_file = "/home/dbutterfield3/Research/rosbag_manip/tests/test_outputs/Husky1_odom.csv"
+        topic = "/hercules_node/Drone1/ground_truth/odom_local"
+        config_dict = {
+            "input_bag": self.path_hercules_bag,
+            "external_msgs_path_ros2": self.path_external_msgs_ros2,
+            "external_msgs_path_ros1": self.path_external_msgs_ros1,
+            "operation_to_run": 'extract_odometry_to_csv',
+            "operation_params": {
+                "extract_odometry_to_csv": {
+                    "topic": topic,
+                    "output_file": output_file,
+                }
+            }
+        }
+
+        # Delete output file if it exists
+        if os.path.exists(output_file):
+            os.remove(output_file)
+
+        # Call the operation to write the csv file
+        self.manipulator = rosbag_manipulation(**config_dict)
+
+        # Load csv file and check values
+        df = pd.read_csv(output_file)
+        
+        first_row = df.iloc[0].tolist()
+        np.testing.assert_equal(first_row[0], 1749131152.952076800)
+        np.testing.assert_equal(abs(first_row[1]), 0)
+        np.testing.assert_equal(abs(first_row[2]), 0)
+        np.testing.assert_equal(first_row[3], 5.403892993927002)
+        np.testing.assert_equal(first_row[4], 1)
+        np.testing.assert_equal(abs(first_row[5]), 0)
+        np.testing.assert_equal(abs(first_row[6]), 0)
+        np.testing.assert_equal(abs(first_row[7]), 0)
+
+        random_row = df[df['timestamp'] == 1749131155.238170624].iloc[0]
+        np.testing.assert_almost_equal(random_row['x'], 0.033755045384168625, 14)
+        np.testing.assert_almost_equal(random_row['y'], -0.5461319088935852, 14)
+        np.testing.assert_almost_equal(random_row['z'], 11.42676067352295, 14)
+        np.testing.assert_almost_equal(random_row['qw'], 0.7257564067840576, 14)
+        np.testing.assert_almost_equal(random_row['qx'], 0.015878107398748398, 14)
+        np.testing.assert_almost_equal(random_row['qy'], 0.026047201827168465, 14)
+        np.testing.assert_almost_equal(random_row['qz'], -0.6872751116752625, 14)
+
+    def helper_extract_images_to_npy_for_topic(self, topic, dtype, expected_shape):
+         # Setup a dictionary with configuration parameters 
+        output_folder = "/home/dbutterfield3/Research/rosbag_manip/tests/test_outputs"
+        config_dict = {
+            "input_bag": self.path_hercules_bag,
+            "external_msgs_path_ros2": self.path_external_msgs_ros2,
+            "external_msgs_path_ros1": self.path_external_msgs_ros1,
+            "operation_to_run": 'extract_images_to_npy',
+            "operation_params": {
+                "extract_images_to_npy": {
+                    "topic": topic,
+                    "output_folder": output_folder,
+                }
+            }
+        }
+
+        # Delete output file if it exists
+        file_path_imgs = Path(output_folder, 'imgs.npy')
+        if os.path.exists(file_path_imgs):
+            os.remove(file_path_imgs)
+        file_path_times = Path(output_folder, 'times.npy')
+        if os.path.exists(file_path_times):
+            os.remove(file_path_times)
+
+        # Call the operation to write the npy files
+        self.manipulator = rosbag_manipulation(**config_dict)
+
+        # Read the images in the rosbag
+        typestore2 = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS2_HUMBLE, self.path_external_msgs_ros2)
+        ros2_msgs = []
+        with Reader2(self.path_hercules_bag) as reader2:
+            connections2 = [x for x in reader2.connections if x.topic == topic]
+            for conn2, timestamp2, rawdata2 in reader2.messages(connections=connections2):
+                ros2_msgs.append(typestore2.deserialize_cdr(rawdata2, conn2.msgtype))
+
+        # Make sure that there is at least one messages to check
+        np.testing.assert_raises(AssertionError, np.testing.assert_equal, len(ros2_msgs), 0)
+
+        # Load the images and times from the .npy files
+        images = np.load(file_path_imgs, mmap_mode='r')
+        times = np.load(file_path_times)
+
+        # Make sure the number of images between both sources match
+        np.testing.assert_equal(len(images), len(ros2_msgs))
+
+        # Assert that each image & time matches exactly
+        for i in range(0, len(ros2_msgs)):
+            msg2 = ros2_msgs[i]
+            np.testing.assert_equal(times[i], msg2.header.stamp.sec + msg2.header.stamp.nanosec * 1e-9)
+            np.testing.assert_array_equal(images[i], np.frombuffer(msg2.data, dtype=dtype).reshape(expected_shape))
+
+    def test_extract_images_to_npy(self):
+        # Ensure both RGB and Depth imagery is properly extracted to .npy files
+        self.helper_extract_images_to_npy_for_topic("/hercules_node/Husky2/front_center_Scene/image", np.uint8, (720, 1280, 3))
+        self.helper_extract_images_to_npy_for_topic("/hercules_node/Husky2/front_center_DepthPlanar/image", np.float32, (720, 1280))
+
 
 if __name__ == "__main__":
     unittest.main()
