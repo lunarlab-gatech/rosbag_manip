@@ -4,5 +4,5 @@ external_msgs_path_ros1: /home/dbutterfield3/Research/rosbag_manip/external_msgs
 operation_to_run: extract_images_to_npy
 operation_params:
   extract_images_to_npy:
-    topic: /hercules_node/Husky2/front_center_DepthPlanar/image
-    output_folder: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_prunedExtract/images
+    topic: /hercules_node/Husky2/front_center_Scene/image
+    output_folder: /media/dbutterfield3/T73/hercules_datasets/V1.2/ausenv_test1_checkpoints_CSLAM_2UAVUGV_prunedExtractV2/Husky2_RGB

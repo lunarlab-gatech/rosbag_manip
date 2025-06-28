@@ -445,63 +445,15 @@ class rosbag_manipulation():
         print(f"Downsampling complete. Output bag saved to {output_bag}.")
 
     # =========================================================================
-    # ============================== Cropping ================================
+    # =========================== Other Utilities =============================
     # ========================================================================= 
 
     def crop(self):
-        """
-        Crop a ROS2 bag file to only include messages within the specified time range. Note
-        that this function uses the timestamps of when the messages were written to the bag,
-        not the timestamps in the headers of the messages themselves.
+        """ Crop a ROS2 bag file. """
 
-        Used Attributes:
-            self.input_bag (str): Path to the input ROS2 bag file.
-            self.output_bag (str): Path to the output ROS2 bag file.
-            self.operation_params (dict): Dictionary containing operation parameters, including:
-                - 'crop': Dictionary with keys:
-                    - 'start_ts': Start timestamp in seconds for cropping.
-                    - 'end_ts': End timestamp in seconds for cropping.
-        """
-
-        # Extract operation specific parameters
         start_ts: float = self.operation_params['crop']['start_ts']
         end_ts: float = self.operation_params['crop']['end_ts']
-
-        # Convert to pathlib paths
-        input_bag = Path(self.input_bag)
-        output_bag = Path(self.output_bag)
-
-        # Make sure we aren't overwriting an existing output bag
-        if output_bag.exists():
-            raise AssertionError("Delete Output Directory first!")
-
-        with Reader2(input_bag) as reader:
-            connections = reader.connections
-            
-            # Setup the bag writer
-            with Writer2(output_bag, version=5) as writer:
-                conn_map = {}
-                for conn in connections:
-                    conn_map[conn.topic] = writer.add_connection(
-                        topic=conn.topic,
-                        msgtype=conn.msgtype,
-                        msgdef=conn.msgdef,
-                        typestore=self.bag_wrapper.get_typestore(),
-                        serialization_format='cdr',
-                        offered_qos_profiles=conn.ext.offered_qos_profiles
-                    )
-
-                # setup tqdm 
-                pbarW = tqdm.tqdm(total=None, desc="Writing messages", unit=" messages")
-
-                # Iternate through messages in the bag
-                for conn, timestamp, rawdata in reader.messages(start=start_ts * 1e9, stop=end_ts * 1e9):
-                    writer.write(conn_map[conn.topic], timestamp, rawdata)
-                    pbarW.update(1)
-
-    # =========================================================================
-    # =========================== Other Utilities =============================
-    # ========================================================================= 
+        self.bag_wrapper.crop(self.output_bag, start_ts, end_ts)
 
     def extract_odometry_to_csv(self):
         """ Extract odometry from a ROS2 bag and save in a csv file. """
@@ -517,6 +469,13 @@ class rosbag_manipulation():
         topic: str = self.operation_params['extract_images_to_npy']['topic']
         output_folder: str = self.operation_params['extract_images_to_npy']['output_folder']
         ImageData.from_ros2_bag(self.input_bag, topic, output_folder)
+
+    def compare_timestamps_two_image_data(self):
+        """ Compare timestamps between two ImageData instances. """
+
+        data0 = ImageData.from_npy(self.operation_params['compare_timestamps_two_image_data']['folder_0'])
+        data1 = ImageData.from_npy(self.operation_params['compare_timestamps_two_image_data']['folder_1'])
+        data0.compare_timestamps(data1)
 
     def convert_ros2_to_ros1(self):
         """ Convert a ROS2 bag from the bag wrapper into a ROS1 bag. """

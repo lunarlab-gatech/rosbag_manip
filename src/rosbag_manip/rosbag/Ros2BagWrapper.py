@@ -7,6 +7,7 @@ import pickle
 from rosbags.rosbag1 import Writer as Writer1
 from rosbags.rosbag1.writer import Connection
 from rosbags.rosbag2 import Reader as Reader2
+from rosbags.rosbag2 import Writer as Writer2
 from rosbags.typesys import Stores, get_typestore, get_types_from_msg
 from rosbags.typesys.store import Typestore
 import tqdm
@@ -158,6 +159,52 @@ class Ros2BagWrapper:
             return Decimal(msg.header.stamp.sec) + Decimal(msg.header.stamp.nanosec) * Decimal("1e-9")
         else:
             raise ValueError(f"Messages does not have a valid header with timestamp: {msg}")
+        
+    # =========================================================================
+    # ============================== Cropping ================================= 
+    # =========================================================================  
+
+    def crop(self, output_path: Path | str, start_ts: float, end_ts: float) -> None:
+        """
+        Crop this ROS2 bag file to only include messages within the specified time range. Note
+        that this function uses the timestamps of when the messages were written to the bag,
+        not the timestamps in the headers of the messages themselves.
+
+        Args:
+            output_path (Path | str): Path to save the output ROS2 bag file.
+            start_ts (float): Start timestamp in seconds for cropping.
+            end_ts (float): End timestamp in seconds for cropping.
+        """
+
+        # Make sure we aren't overwriting an existing output bag
+        output_bag = Path(output_path)
+        if output_bag.exists():
+            raise AssertionError("Delete Output Directory first!")
+
+        # Open the current bag
+        with Reader2(self.bag_path) as reader:
+            connections = reader.connections
+            
+            # Setup the bag writer
+            with Writer2(output_bag, version=5) as writer:
+                conn_map = {}
+                for conn in connections:
+                    conn_map[conn.topic] = writer.add_connection(
+                        topic=conn.topic,
+                        msgtype=conn.msgtype,
+                        msgdef=conn.msgdef,
+                        typestore=self.get_typestore(),
+                        serialization_format='cdr',
+                        offered_qos_profiles=conn.ext.offered_qos_profiles
+                    )
+
+                # setup tqdm 
+                pbarW = tqdm.tqdm(total=None, desc="Writing messages", unit=" messages")
+
+                # Iternate through messages in the bag
+                for conn, timestamp, rawdata in reader.messages(start=start_ts * 1e9, stop=end_ts * 1e9):
+                    writer.write(conn_map[conn.topic], timestamp, rawdata)
+                    pbarW.update(1)
         
     # =========================================================================
     # ============================= Conversions ===============================

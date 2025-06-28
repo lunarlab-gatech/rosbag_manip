@@ -336,7 +336,7 @@ class TestRosbagManip(unittest.TestCase):
     
     def test_extract_odometry_to_csv(self):
         # Setup a dictionary with configuration parameters 
-        output_file = "/home/dbutterfield3/Research/rosbag_manip/tests/test_outputs/Husky1_odom.csv"
+        output_file = Path(Path('.'), 'tests', 'test_outputs', 'Husky1_odom.csv').absolute()
         topic = "/hercules_node/Drone1/ground_truth/odom_local"
         config_dict = {
             "input_bag": self.path_hercules_bag,
@@ -381,8 +381,8 @@ class TestRosbagManip(unittest.TestCase):
         np.testing.assert_almost_equal(random_row['qz'], -0.6872751116752625, 14)
 
     def helper_extract_images_to_npy_for_topic(self, topic, dtype, expected_shape):
-         # Setup a dictionary with configuration parameters 
-        output_folder = "/home/dbutterfield3/Research/rosbag_manip/tests/test_outputs"
+        # Setup a dictionary with configuration parameters 
+        output_folder = Path(Path('.'), 'tests', 'test_outputs').absolute()
         config_dict = {
             "input_bag": self.path_hercules_bag,
             "external_msgs_path_ros2": self.path_external_msgs_ros2,

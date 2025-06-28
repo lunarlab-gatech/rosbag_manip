@@ -5,6 +5,7 @@ from decimal import Decimal
 from enum import Enum
 import numpy as np
 from numpy.lib.format import open_memmap
+import os
 from pathlib import Path
 from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
@@ -19,6 +20,25 @@ class ImageData:
     class ImageEncoding(Enum):
         RGB8 = 0
         _32FC1 = 1
+    
+        @classmethod
+        def from_str(cls, encoding_str: str):
+            if encoding_str == "ImageEncoding.RGB8":
+                return cls.RGB8
+            elif encoding_str == "ImageEncoding._32FC1":
+                return cls._32FC1
+            else:
+                raise ValueError(f"Unknown encoding: {encoding_str}")
+        
+        @classmethod
+        def from_ros_str(cls, encoding_str: str):
+            encoding_str = encoding_str.lower()
+            if encoding_str == 'rgb8':
+                return ImageData.ImageEncoding.RGB8
+            elif encoding_str == "32fc1":
+                return ImageData.ImageEncoding._32FC1
+            else:
+                raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
 
     # Define data attributes
     frame_id: str
@@ -79,13 +99,14 @@ class ImageData:
                 frame_id = msg.header.frame_id
                 height = msg.height
                 width = msg.width
-                encoding = ImageData._convert_ros_encoding_to_enum(msg.encoding.lower())
+                encoding = ImageData.ImageEncoding.from_ros_str(msg.encoding)
                 img = ImageData._decode_image_msg(msg, encoding, height, width)
                 image_shape = img.shape
                 break
         
         # Pre-allocate arrays (memory-mapped or otherwise)
         imgs_path = str(Path(save_folder) / "imgs.npy")
+        os.makedirs(save_folder, exist_ok=True)
         img_memmap = open_memmap(imgs_path, dtype=img.dtype, shape=(num_msgs, *image_shape), mode='w+')
         timestamps_np = np.zeros(num_msgs, dtype=np.float128)
 
@@ -156,7 +177,7 @@ class ImageData:
         frame_id = attr_data["frame_id"]
         height = int(attr_data["height"])
         width = int(attr_data["width"])
-        encoding = ImageData.ImageEncoding[attr_data["encoding"]]  # Convert string to enum
+        encoding = ImageData.ImageEncoding.from_str(attr_data["encoding"])
 
         # Create an ImageData class
         return cls(frame_id, np.load(ts_path), height, width, encoding, np.load(imgs_path, mmap_mode='r+'))
@@ -165,26 +186,6 @@ class ImageData:
     # ============================ Image Decoding ============================= 
     # ========================================================================= 
 
-    @staticmethod
-    def _convert_ros_encoding_to_enum(encoding_str: str) -> ImageData.ImageEncoding:
-        """
-        Convert ROS image encoding str to ImageEncoding enum.
-
-        Args:
-            encoding_str (str): ROS2 image encoding str to convert.
-        Returns:
-            ImageEncoding: Enum compatible with this class.
-        Raises:
-            NotImplementedError: If encoding_str doesn't have an implemented
-                ImageEncoding yet.
-        """
-
-        if encoding_str == 'rgb8':
-            return ImageData.ImageEncoding.RGB8
-        elif encoding_str == "32fc1":
-            return ImageData.ImageEncoding._32FC1
-        else:
-            raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
     
     @staticmethod
     def _map_encoding_to_dtype_and_channels(encoding: ImageData.ImageEncoding) -> Tuple[type, int]:
@@ -231,4 +232,19 @@ class ImageData:
         images.
         """
 
-        # For each timestamp in self, find the distance to the closest timestamp in other
+        # Find the locations in other where self timestamps would fit
+        idxs = np.searchsorted(other.timestamps, self.timestamps, side='right')
+
+        # Get the left indices and right indices
+        idxs_right = np.clip(idxs, 0, len(other.timestamps)-1)
+        idxs_left = np.clip(idxs - 1, 0, len(other.timestamps)-1)
+
+        # Get distances to nearest on either side
+        dists = np.minimum(np.abs(self.timestamps - other.timestamps[idxs_left]), 
+                           np.abs(self.timestamps - other.timestamps[idxs_right]))
+        
+        # Print the mean and std of the distances
+        print(f"Mean distance (left): {np.mean(np.abs(self.timestamps - other.timestamps[idxs_left]))}")
+        print(f"Mean distance (right): {np.mean(np.abs(self.timestamps - other.timestamps[idxs_right]))}")
+        print(f"Mean distance: {np.mean(dists)}")
+        print(f"Std distance: {np.std(dists)}")
