@@ -1,5 +1,6 @@
-# Ignore generated figures
+# Ignore generated figures & files
 figures/
+outputs/
 
 # Ignore coverage files
 .coverage

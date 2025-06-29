@@ -15,9 +15,12 @@ dependencies = ["coverage",
                 "matplotlib",
                 "numpy",
                 "rosbags",
+                "scipy",
                 "snakeviz",
                 "tqdm",
+                "typeguard",
                 "typer",
+                "pandas",
                 "pyyaml"]
 
 # == License information TBD ==
