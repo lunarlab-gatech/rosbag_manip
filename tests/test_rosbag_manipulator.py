@@ -7,6 +7,7 @@ from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag1 import Reader as Reader1
 from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys import Stores, get_typestore
+from test_utils import safe_urlretrieve
 import unittest
 import urllib.request
 
@@ -32,9 +33,9 @@ class TestRosbagManip(unittest.TestCase):
 
         # Download the test bag (as its too big for GitHub)
         if not os.path.isfile(path_hercules_bag_db3):
-            TestRosbagManip.safe_urlretrieve("https://www.dropbox.com/scl/fi/r3qxkbypaiq3o277qu9ad/hercules_test_bag_pruned_3.db3?rlkey=uumrmpt80elj2gjhqls6027pm&st=4g498h35&dl=1", path_hercules_bag_db3)
+            safe_urlretrieve("https://www.dropbox.com/scl/fi/r3qxkbypaiq3o277qu9ad/hercules_test_bag_pruned_3.db3?rlkey=uumrmpt80elj2gjhqls6027pm&st=4g498h35&dl=1", path_hercules_bag_db3)
         if not os.path.isfile(path_hercules_bag_yaml):
-            TestRosbagManip.safe_urlretrieve("https://www.dropbox.com/scl/fi/alze2h2e3h4l09f55uka9/metadata.yaml?rlkey=may9dvginz3bg6gsgtgcod3m7&st=ypw42mhh&dl=1", path_hercules_bag_yaml)
+            safe_urlretrieve("https://www.dropbox.com/scl/fi/alze2h2e3h4l09f55uka9/metadata.yaml?rlkey=may9dvginz3bg6gsgtgcod3m7&st=ypw42mhh&dl=1", path_hercules_bag_yaml)
 
     @staticmethod
     def count_msgs_in_ros2_bag(bag_path: Path) -> dict:
@@ -53,27 +54,6 @@ class TestRosbagManip(unittest.TestCase):
                 except:
                     topic_counts[topic] = 1
         return topic_counts
-
-    @staticmethod
-    def safe_urlretrieve(url, dest_path):
-        """
-        A method that retrives a file from a url, making sure
-        to create the destination path if it doesn't exist.
-
-        Throws:
-            RuntimeError - If the recieved content is html.
-        """
-        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-        with urllib.request.urlopen(url, timeout=10) as response:
-            content_type = response.headers.get('Content-Type', '')
-            if 'text/html' in content_type:
-                raise RuntimeError(f"Failed to download {url}: received HTML instead of the expected file")
-            with open(dest_path, 'wb') as out_file:
-                while True:
-                    chunk = response.read(8192)
-                    if not chunk:
-                        break
-                    out_file.write(chunk)
 
     def assert_two_msgs_match(self, ros1_bag: Path, ros2_bag: Path, topic: str):
         """
