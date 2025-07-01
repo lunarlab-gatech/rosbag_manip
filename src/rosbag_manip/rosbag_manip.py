@@ -43,6 +43,11 @@ class rosbag_manipulation():
         # Setup dictionary to store msg instances
         self.ros1_msg_instances = {}
 
+        if isinstance(self.input_bag, str):
+            self.input_bag = Path(self.input_bag)
+        if isinstance(self.output_bag, str):
+            self.output_bag = Path(self.output_bag)
+
         # Run desired operation
         self.run_operation()
 
