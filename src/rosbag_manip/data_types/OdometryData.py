@@ -1,21 +1,25 @@
+from __future__ import annotations
+
 from ..conversion_utils import convert_collection_into_decimal_array
 import csv
+from .Data import Data
 from decimal import Decimal
+import matplotlib.pyplot as plt
 import numpy as np
 import os
+import pandas as pd
 from pathlib import Path
 from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys.store import Typestore
+from scipy.spatial.transform import Rotation as R
 from typeguard import typechecked
 import tqdm
 
-class OdometryData:
+class OdometryData(Data):
 
-    # Define data attributes
-    frame_id: str
+    # Define odometry-specific data attributes
     child_frame_id: str
-    timestamps: np.ndarray[Decimal] # seconds
     positions: np.ndarray[Decimal] # meters (x, y, z)
     orientations: np.ndarray[Decimal] # quaternions (x, y, z, w)
 
@@ -24,17 +28,12 @@ class OdometryData:
                  positions: np.ndarray | list, orientations: np.ndarray | list):
         
         # Copy initial values into attributes
-        self.frame_id = frame_id
+        super().__init__(frame_id, timestamps)
         self.child_frame_id = child_frame_id
-        self.timestamps = convert_collection_into_decimal_array(timestamps)
         self.positions = convert_collection_into_decimal_array(positions)
         self.orientations = convert_collection_into_decimal_array(orientations)
 
-        # Check to ensure that all timestamps are sequential & arrays have same length
-        for i in range(len(self.timestamps) - 1):
-            if self.timestamps[i] >= self.timestamps[i+1]:
-                raise ValueError("Timestamps do not come in sequential order!")
-            
+        # Check to ensure that all arrays have same length
         if len(self.timestamps) != len(self.positions) or len(self.positions) != len(self.orientations):
             raise ValueError("Lengths of timestamp, position, and orientation arrays are not equal!")
 
@@ -79,7 +78,7 @@ class OdometryData:
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
                 frame_id = msg.header.frame_id
                 child_frame_id = msg.child_frame_id
-
+                break
 
             # Extract individual message data
             connections = [x for x in reader.connections if x.topic == odom_topic]
@@ -101,6 +100,35 @@ class OdometryData:
         # Create an OdometryData class
         return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
     
+    @classmethod
+    @typechecked
+    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str):
+        """
+        Creates a class structure from a csv file, where the order of values
+        in the files follows ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'].
+
+        Args:
+            csv_path (Path | str): Path to the CSV file.
+            frame_id (str): The frame that this odometry is relative to.
+            child_frame_id (str): The frame whose pose is represented by this odometry.
+        Returns:
+            OdometryData: Instance of this class.
+        """
+
+        # Read the csv file
+        df1 = pd.read_csv(str(csv_path), header=0, names=['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'])
+        
+        # Convert columns to np.ndarray[Decimal]
+        timestamps_np = np.array([Decimal(str(ts)) for ts in df1['timestamp']], dtype=object)
+        positions_np = np.array([[Decimal(str(x)), Decimal(str(y)), Decimal(str(z))] 
+                                 for x, y, z in zip(df1['x'], df1['y'], df1['z'])], dtype=object)
+        orientations_np = np.array([[Decimal(str(qx)), Decimal(str(qy)), Decimal(str(qz)), Decimal(str(qw))]
+                                    for qx, qy, qz, qw in zip(df1['qx'], df1['qy'], df1['qz'], df1['qw'])], dtype=object)
+
+        # Create an OdometryData class
+        return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
+    
+
     # =========================================================================
     # ========================= Manipulation Methods ========================== 
     # =========================================================================  
@@ -134,9 +162,22 @@ class OdometryData:
                 cumulative_noise_pos[key] += abs(noise_pos[key])
 
             # Update positions
-            self.positions[i][0] += cumulative_noise_pos['x']
-            self.positions[i][1] += cumulative_noise_pos['y']
-            self.positions[i][2] += cumulative_noise_pos['z']
+            self.positions[i][0] += Decimal(cumulative_noise_pos['x'])
+            self.positions[i][1] += Decimal(cumulative_noise_pos['y'])
+            self.positions[i][2] += Decimal(cumulative_noise_pos['z'])
+
+    def shift_position(self, x_shift: float, y_shift: float, z_shift: float):
+        """
+        Shifts the positions of the odometry.
+
+        Args:
+            x_shift (float): Shift in x-axis.
+            y_shift (float): Shift in y_axis.
+            z_shift (float): Shift in z_axis.
+        """
+        self.positions[:,0] += Decimal(x_shift)
+        self.positions[:,1] += Decimal(y_shift)
+        self.positions[:,2] += Decimal(z_shift)
 
     # =========================================================================
     # ============================ Export Methods ============================= 
@@ -178,4 +219,94 @@ class OdometryData:
                     str(self.orientations[i][2])])
                 pbar.update(1)
 
+    # =========================================================================
+    # ============================ Visualization ============================== 
+    # =========================================================================  
 
+    @typechecked
+    def visualize(self, otherList: list[OdometryData], titles: list[str]):
+        """
+        Visualizes this OdometryData (and all others included in otherList)
+        on a single plot.
+
+        Args:
+            otherList (list[OdometryData]): All other OdometryData objects whose
+                odometry should also be visualized on this plot.
+            titles (list[str]): Titles for each OdometryData object, starting 
+                with self.
+        """
+
+        def draw_axes(data: OdometryData, label_prefix=""):
+            """Helper function that visualizes orientation along the trajectory path with axes."""
+            axes_interval = 5000
+            axes_length = 5
+
+            for i in range(0, data.len(), axes_interval):
+                # Extract data
+                pos = data.positions[i].astype(np.float64)
+                quat = data.orientations[i].astype(np.float64)
+                rot = R.from_quat(quat, scalar_first=False)
+
+                # Define unit vectors for X, Y, Z in local frame
+                x_axis = rot.apply([1, 0, 0])
+                y_axis = rot.apply([0, 1, 0])
+                z_axis = rot.apply([0, 0, 1])
+
+                # Plot axes
+                ax.quiver(*pos, *x_axis, length=axes_length, color='r', normalize=True, linewidth=0.8)
+                ax.quiver(*pos, *y_axis, length=axes_length, color='g', normalize=True, linewidth=0.8)
+                ax.quiver(*pos, *z_axis, length=axes_length, color='b', normalize=True, linewidth=0.8)
+
+        # Ensure that the lists are of the proper sizes
+        if (len(otherList) + 1) != len(titles):
+            raise ValueError("Length of titles should be one more than length of otherlist!")
+
+        # Build a 3D plot
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        ax.plot(self.positions[:,0].astype(np.float64), 
+                self.positions[:,1].astype(np.float64), 
+                self.positions[:,2].astype(np.float64), label=titles[0])
+        for i, other in enumerate(otherList):
+            ax.plot(other.positions[:,0].astype(np.float64), 
+                    other.positions[:,1].astype(np.float64), 
+                    other.positions[:,2].astype(np.float64), 
+                    label=titles[1+i])
+
+        # Draw orientation axes (X = red, Y = green, Z = blue)
+        draw_axes(self)
+        for other in otherList:
+            draw_axes(other)
+
+        # Set labels
+        ax.set_title("Trajectory Comparison with Full Orientation")
+        ax.set_xlabel("X (m)")
+        ax.set_ylabel("Y (m)")
+        ax.set_zlabel("Z (m)")
+        ax.legend()
+
+        # Concatenate all x, y and z values together
+        all_x = self.positions[:,0]
+        all_y = self.positions[:,1]
+        all_z = self.positions[:,2]
+        for other in otherList:
+            all_x = np.concatenate((all_x, other.positions[:,0]))
+            all_y = np.concatenate((all_y, other.positions[:,1]))
+            all_z = np.concatenate((all_z, other.positions[:,2]))
+        all_x = all_x.astype(np.float64)
+        all_y = all_y.astype(np.float64)
+        all_z = all_z.astype(np.float64)
+
+        # Set an equal scale for all axes
+        x_center = (all_x.max() + all_x.min()) / 2
+        y_center = (all_y.max() + all_y.min()) / 2
+        z_center = (all_z.max() + all_z.min()) / 2
+        max_range = max(all_x.max() - all_x.min(), all_y.max() - all_y.min(), all_z.max() - all_z.min()) / 2
+        ax.set_xlim(x_center - max_range, x_center + max_range)
+        ax.set_ylim(y_center - max_range, y_center + max_range)
+        ax.set_zlim(z_center - max_range, z_center + max_range)
+
+        # Show the plot
+        plt.tight_layout()
+        plt.show()

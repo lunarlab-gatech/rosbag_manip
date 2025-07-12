@@ -30,6 +30,11 @@ class TestImageData(unittest.TestCase):
         if not os.path.isfile(path_hercules_bag_yaml):
             safe_urlretrieve("https://www.dropbox.com/scl/fi/alze2h2e3h4l09f55uka9/metadata.yaml?rlkey=may9dvginz3bg6gsgtgcod3m7&st=ypw42mhh&dl=1", path_hercules_bag_yaml)
 
+    def test_from_ros_str(self):
+        """ Make sure that an exception is thrown with a non-valid ROS encoding str"""
+        with np.testing.assert_raises(NotImplementedError):
+            ImageData.ImageEncoding.from_ros_str("fake_name")
+
     def test_from_npy(self):
         """
         Test that create of ImgData from an .npy file results 

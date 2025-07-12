@@ -108,12 +108,14 @@ class rosbag_manipulation():
                     - 'expected_msgs': Expected number of messages in the topic, for progress bar.
                     - 'robot_name': if 'topic' is '/tf' or '/tf_static', the robot name which then
                         choses the transform with a child frame id of '{robot_name}/odom_local'.
+                    - 'max_msgs': The maximum number of messages to use.
         """
 
         # Extract operation specific parameters
         topic: str = self.operation_params['hertz_analysis']['topic']
         output_folder: str = self.operation_params['hertz_analysis']['output_folder']
         expected_msgs: int = self.operation_params['hertz_analysis']['expected_msgs']
+        max_msgs: int = self.operation_params['hertz_analysis']['max_msgs']
         try: robot_name: str = self.operation_params['hertz_analysis']['robot_name']
         except: pass
 
@@ -127,6 +129,7 @@ class rosbag_manipulation():
 
             # setup tqdm 
             pbar = tqdm.tqdm(total=expected_msgs, desc="Extracting timestamps", unit="frames")
+            i = 0
 
             # Only analyze the specified topic
             connections = [x for x in reader.connections if x.topic == topic]
@@ -140,10 +143,13 @@ class rosbag_manipulation():
                         and hasattr(transform, 'header') and hasattr(transform.header, 'stamp'):
                             topic_timestamps.append(Decimal(transform.header.stamp.sec) + Decimal(transform.header.stamp.nanosec) * Decimal(1e-9))
                 elif hasattr(msg, 'header') and hasattr(msg.header, 'stamp'):
-                    topic_timestamps.append(rosbag_manipulation.extract_timestamp(msg))
+                    topic_timestamps.append(self.bag_wrapper.extract_timestamp(msg))
                 else:
                     raise ValueError(f"Topic: {topic} does not have a valid header with timestamp.")
                 pbar.update(1)
+                i += 1
+                if i >= max_msgs:
+                    break
 
         # Calculate the differences between consecutive timestamps
         if len(topic_timestamps) < 2:
@@ -460,7 +466,16 @@ class rosbag_manipulation():
 
         topic: str = self.operation_params['extract_odometry_to_csv']['topic']
         output_folder: str = self.operation_params['extract_odometry_to_csv']['output_file']
+        add_noise: str = self.operation_params['extract_odometry_to_csv']['add_noise']
+        xy_noise_std_per_frame: float = self.operation_params['extract_odometry_to_csv']['xy_noise_std_per_frame']
+        z_noise_std_per_frame: str = self.operation_params['extract_odometry_to_csv']['z_noise_std_per_frame']
+        shift_position_xy: float = self.operation_params['extract_odometry_to_csv']['shift_position_xy']
+        shift_position_z: float = self.operation_params['extract_odometry_to_csv']['shift_position_z']
+
         odom_data = OdometryData.from_ros2_bag(self.input_bag, topic)
+        if add_noise:
+            odom_data.add_folded_guassian_noise_to_position(xy_noise_std_per_frame, z_noise_std_per_frame)
+            odom_data.shift_position(shift_position_xy, shift_position_xy, shift_position_z)
         odom_data.to_csv(output_folder)
 
     def extract_images_to_npy(self):

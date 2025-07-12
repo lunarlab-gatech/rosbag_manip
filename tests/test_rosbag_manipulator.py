@@ -327,6 +327,11 @@ class TestRosbagManip(unittest.TestCase):
                 "extract_odometry_to_csv": {
                     "topic": topic,
                     "output_file": output_file,
+                    "add_noise": False,
+                    "xy_noise_std_per_frame": 0.0001,
+                    "z_noise_std_per_frame": 0.00001,
+                    "shift_position_xy": 50,
+                    "shift_position_z": 10,
                 }
             }
         }

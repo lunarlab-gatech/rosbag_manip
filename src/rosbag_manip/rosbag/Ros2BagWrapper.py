@@ -1,3 +1,4 @@
+from ..data_types.Data import Data
 from decimal import Decimal
 import glob
 import inspect
@@ -206,6 +207,52 @@ class Ros2BagWrapper:
                     writer.write(conn_map[conn.topic], timestamp, rawdata)
                     pbarW.update(1)
         
+    # =========================================================================
+    # ======================== Write Data to a Rosbag =========================
+    # ========================================================================= 
+    
+    @staticmethod
+    @typechecked
+    def write_data_to_rosbag(bag_path: Path | str, data_list: list[Data], 
+                             data_topics: list[str], external_msgs_path: Path | str | None):
+        """
+        This helper method writes a new bag with the data in the provided Data classes.
+
+        Args:
+            bag_path (Path | str): The path to write the output bag.
+            data_list (list[Data]): A list of all Data objects whose contents should
+                be written into the bag.
+            data_topics (list[str]): The topics under which the corresponding Data class's
+                data should be saved.
+            external_msgs_path (Path | str | None): Path to the directory containing 
+                external message definitions.
+        """
+
+        # Create the typestore
+        typestore = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS2_HUMBLE, external_msgs_path)
+
+        # Open a ROS2 Humble bag for writing
+        with Writer2(str(bag_path)) as writer:
+
+            # For each data class
+            for i in range(0, len(data_list)):
+                data = data_list[i]
+                topic = data_topics[i]
+
+                # Add the new connection
+                msgtype = data.get_ros_msg_type()
+                connection = writer.add_connection(topic, msgtype, typestore=typestore)
+
+                # Setup a tqdm bar
+                pbar = tqdm.tqdm(total=data.len(), desc=f"Writing {topic}", unit=" messages")
+
+                # Write each of the data entries
+                for j in range(0, data.len()):
+                    msg = data.get_ros_msg(i)
+                    timestamp = int(Ros2BagWrapper.extract_timestamp(msg) * Decimal('1e9'))
+                    writer.write(connection, timestamp, typestore.serialize_cdr(msg, msgtype))
+                    pbar.update(1)
+
     # =========================================================================
     # ============================= Conversions ===============================
     # ========================================================================= 

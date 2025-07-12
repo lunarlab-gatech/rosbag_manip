@@ -1,20 +1,24 @@
 from __future__ import annotations
 
 from ..conversion_utils import convert_collection_into_decimal_array
+from .Data import Data
+import decimal
 from decimal import Decimal
 from enum import Enum
 import numpy as np
 from numpy.lib.format import open_memmap
 import os
 from pathlib import Path
+from PIL import Image
 from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
+from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
 from typeguard import typechecked
 from typing import Tuple
 import tqdm
 
-class ImageData:
+class ImageData(Data):
 
     # Define image encodings enum
     class ImageEncoding(Enum):
@@ -28,7 +32,7 @@ class ImageData:
             elif encoding_str == "ImageEncoding._32FC1":
                 return cls._32FC1
             else:
-                raise ValueError(f"Unknown encoding: {encoding_str}")
+                raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
         
         @classmethod
         def from_ros_str(cls, encoding_str: str):
@@ -39,10 +43,25 @@ class ImageData:
                 return ImageData.ImageEncoding._32FC1
             else:
                 raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
+        
+        @classmethod
+        def from_pillow_str(cls, encoding_str: str):
+            if encoding_str == "RGB":
+                return ImageData.ImageEncoding.RGB8
+            else:
+                raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
+            
+        @staticmethod
+        def to_ros_str(encoding: ImageData.ImageEncoding):
+            if encoding == ImageData.ImageEncoding.RGB8:
+                return 'rgb8'
+            if encoding == ImageData.ImageEncoding._32FC1:
+                return '32FC1'
+            else:
+                raise NotImplementedError(f"This ImageData.ImageEncoding.{encoding} is not yet implemented (or it doesn't exist)!")
 
-    # Define data attributes
-    frame_id: str
-    timestamps: np.ndarray[Decimal]
+
+    # Define image-specific data attributes
     height: int
     width: int
     encoding: ImageEncoding
@@ -53,17 +72,11 @@ class ImageData:
                  height: int, width: int, encoding: ImageData.ImageEncoding, images: np.ndarray):
         
         # Copy initial values into attributes
-        self.frame_id = frame_id
-        self.timestamps = convert_collection_into_decimal_array(timestamps)
+        super().__init__(frame_id, timestamps)
         self.height = height
         self.width = width
         self.encoding = encoding
         self.images = images
-
-        # Check to ensure that all timestamps are sequential
-        for i in range(len(self.timestamps) - 1):
-            if self.timestamps[i] >= self.timestamps[i+1]:
-                raise ValueError("Timestamps do not come in sequential order!")
 
     # =========================================================================
     # ============================ Class Methods ============================== 
@@ -121,8 +134,12 @@ class ImageData:
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
 
                 # Extract images (skipping malformed ones)
-                img = ImageData._decode_image_msg(msg, encoding, height, width)
-                if img.shape == image_shape: 
+                img = None
+                try:
+                    img = ImageData._decode_image_msg(msg, encoding, height, width)
+                except Exception as e:
+                    print("Failure decoding image msg: ", e)
+                if img is not None and img.shape == image_shape: 
                     img_memmap[i] = img
 
                 # Extract timestamps
@@ -166,7 +183,7 @@ class ImageData:
         ts_path = str(Path(folder_path) / "times.npy")
         attr_path = str(Path(folder_path) / "attributes.txt")
 
-        # Read in the attirubtes
+        # Read in the attributes
         attr_data = {}
         with open(attr_path, "r") as f:
             for line in f:
@@ -181,6 +198,45 @@ class ImageData:
 
         # Create an ImageData class
         return cls(frame_id, np.load(ts_path), height, width, encoding, np.load(imgs_path, mmap_mode='r+'))
+    
+    @classmethod
+    @typechecked
+    def from_TartanAir(cls, folder_path: Path | str, img_folder_name: str, ts_folder_name: str,
+                       frame_id: str):
+        """
+        Creates a class structure from the TartanAir dataset format, which includes
+        images as .png files in a folder and timestamps as part of the pose file.
+
+        Args:
+            folder_path (Path | str): Path to the folder containing the TartanAir sequence.
+            img_folder_name (str): Name of the folder containing the .png files.
+            ts_folder_name (str): Name of the folder containing 'cam_time.npy'.
+            frame_id (str): The frame where this image data was collected.
+        Returns:
+            ImageData: Instance of this class.
+        """
+
+        # Get all png files in the designated folder (sorted)
+        img_folder_path = Path(folder_path) / img_folder_name
+        all_image_files = [str(p) for p in sorted(Path(img_folder_path).glob("*.png"))]
+
+        # Make sure the mode is what we expect
+        first_image = Image.open(all_image_files[0])
+        if first_image.mode != "RGB":
+            raise NotImplementedError(f"Only RGB mode suppported for 'from_TartanAir', not \
+                                      {first_image.mode}")
+
+        # Load the images as numpy arrays
+        images = np.zeros((len(all_image_files), first_image.height, first_image.width, 3), dtype=np.uint8)
+        for i, path in enumerate(all_image_files):
+            images[i] = np.array(Image.open(path), dtype=np.uint8)
+
+        # Load the corresponding timestamps
+        timestamps = convert_collection_into_decimal_array(np.load(Path(folder_path) / ts_folder_name / 'cam_time.npy'))
+        
+        # Create an ImageData class
+        return cls(frame_id, timestamps, first_image.height, first_image.width, 
+                   ImageData.ImageEncoding.from_pillow_str(first_image.mode), images)
 
     # =========================================================================
     # ============================ Image Decoding ============================= 
@@ -248,3 +304,55 @@ class ImageData:
         print(f"Mean distance (right): {np.mean(np.abs(self.timestamps - other.timestamps[idxs_right]))}")
         print(f"Mean distance: {np.mean(dists)}")
         print(f"Std distance: {np.std(dists)}")
+
+    # =========================================================================
+    # =========================== Conversion to ROS =========================== 
+    # ========================================================================= 
+
+    @typechecked
+    @staticmethod
+    def get_ros_msg_type() -> str:
+        """ Return the __msgtype__ for an Image msg. """
+        typestore = get_typestore(Stores.ROS2_HUMBLE)
+        return typestore.types['sensor_msgs/msg/Image'].__msgtype__
+
+    @typechecked
+    def get_ros_msg(self, i: int):
+        """
+        Gets an Image ROS2 Humble message corresponding to the image represented by index i.
+        
+        Args:
+            i (int): The index of the image message to convert.
+        Raises:
+            ValueError: If i is outside the data bounds.
+        """
+
+        # Check to make sure index is within data bounds
+        if i < 0 or i >= self.len():
+            raise ValueError(f"Index {i} is out of bounds!")
+
+        # Get ROS2  message classes
+        typestore = get_typestore(Stores.ROS2_HUMBLE)
+        Image, Header, Time = typestore.types['sensor_msgs/msg/Image'], typestore.types['std_msgs/msg/Header'], typestore.types['builtin_interfaces/msg/Time']
+
+        # Calculate the step
+        if self.encoding == ImageData.ImageEncoding.RGB8:
+            step = 3 * self.width
+        elif self.encoding == ImageData.ImageEncoding._32FC1:
+            step = 4 * self.width
+
+        # Get the seconds and nanoseconds
+        seconds = int(self.timestamps[i])
+        nanoseconds = (self.timestamps[i] - self.timestamps[i].to_integral_value(rounding=decimal.ROUND_DOWN)) * Decimal("1e9").to_integral_value(decimal.ROUND_HALF_EVEN)
+
+        # Write the data into the new class
+        return Image(Header(stamp=Time(sec=int(seconds), 
+                                       nanosec=int(nanoseconds)), 
+                            frame_id=self.frame_id),
+                    height=self.height, 
+                    width=self.width, 
+                    encoding=ImageData.ImageEncoding.to_ros_str(self.encoding),
+                    is_bigendian=0, 
+                    step=step, 
+                    data=self.images[i].flatten())
+        

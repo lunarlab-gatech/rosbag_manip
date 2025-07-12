@@ -14,7 +14,12 @@ def convert_collection_into_decimal_array(collection: np.ndarray | list) -> np.n
     Returns:
         np.ndarray[Decimal]: A numpy array with Decimal objects.
     """
+    def safe_decimal(x):
+        return Decimal(str(x))
 
-    if type(collection) == list: return np.array(collection, dtype=Decimal)
-    elif collection.dtype != Decimal: return collection.astype(Decimal)
-    else: return collection
+    if isinstance(collection, list):
+        return np.array([safe_decimal(x) for x in collection], dtype=object)
+    elif all(isinstance(x, Decimal) for x in collection.flat):
+        return collection
+    else:
+        return np.vectorize(safe_decimal)(collection)

@@ -21,6 +21,7 @@ dependencies = ["coverage",
                 "typeguard",
                 "typer",
                 "pandas",
+                "pillow",
                 "pyyaml"]
 
 # == License information TBD ==
