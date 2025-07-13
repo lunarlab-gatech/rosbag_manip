@@ -56,6 +56,8 @@ class ImuData(Data):
         typestore: Typestore = bag_wrapper.get_typestore()
         num_msgs: int = bag_wrapper.get_topic_count(imu_topic)
 
+        # TODO: Load the frame id directly from the ROS2 bag.
+
         # Setup arrays to hold data
         timestamps = np.zeros((num_msgs), dtype=object)
         lin_acc = np.zeros((num_msgs, 3), dtype=np.double)
@@ -128,7 +130,8 @@ class ImuData(Data):
     def from_txt_file(cls, file_path: Path | str, frame_id: str):
         """
         Creates a class structure from the TartanAir dataset format, which includes
-        various .txt files with IMU data.
+        various .txt files with IMU data. It expects the timestamp, the linear
+        acceleration, and the angular velocity, seperated by spaced in that order.
 
         Args:
             file_path (Path | str): Path to the file containing the IMU data.
@@ -156,15 +159,9 @@ class ImuData(Data):
                 lin_acc[i] = line_split[1:4]
                 ang_vel[i] = line_split[4:7]
         
-        # Convert into the proper format
-        timestamps = convert_collection_into_decimal_array(timestamps)
-        lin_acc = convert_collection_into_decimal_array(lin_acc)
-        ang_vel = convert_collection_into_decimal_array(ang_vel)
-
         # Set orientation to identity, as we don't have orientation from HERCULES IMU
         orientation = np.zeros((lin_acc.shape[0], 4), dtype=int)
         orientation[:,3] = np.ones((lin_acc.shape[0]), dtype=int)
-        orientation = convert_collection_into_decimal_array(orientation)
 
         # Create the ImuData class
         return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)

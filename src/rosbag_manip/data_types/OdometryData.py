@@ -3,6 +3,7 @@ from __future__ import annotations
 from ..conversion_utils import convert_collection_into_decimal_array
 import csv
 from .Data import Data
+import decimal
 from decimal import Decimal
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,6 +12,7 @@ import pandas as pd
 from pathlib import Path
 from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
+from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
 from scipy.spatial.transform import Rotation as R
 from typeguard import typechecked
@@ -86,12 +88,12 @@ class OdometryData(Data):
                 msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
                 
                 timestamps_np[i] = bag_wrapper.extract_timestamp(msg)
-
                 pos = msg.pose.pose.position
                 positions_np[i] = np.array([Decimal(pos.x), Decimal(pos.y), Decimal(pos.z)])
-
                 ori = msg.pose.pose.orientation
                 orientations_np[i] = np.array([Decimal(ori.x), Decimal(ori.y), Decimal(ori.z), Decimal(ori.w)])
+
+                # NOTE: Doesn't support Twist information currently
 
                 # Increment the count
                 i += 1
@@ -128,7 +130,43 @@ class OdometryData(Data):
         # Create an OdometryData class
         return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
     
+    @classmethod
+    @typechecked
+    def from_txt_file(cls, file_path: Path | str, frame_id: str, child_frame_id: str):
+        """
+        Creates a class structure from a text file, where the order of values
+        in the files follows ['timestamp', 'x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'].
 
+        Args:
+            file_path (Path | str): Path to the file containing the odometry data.
+            frame_id (str): The frame where this odometry is relative to.
+            child_frame_id (str): The frame whose pose is represented by this odometry.
+        Returns:
+            OdometryData: Instance of this class.
+        """
+        
+        # Count the number of lines in the file
+        line_count = 0
+        with open(str(file_path), 'r') as file:
+            for _ in file: 
+                line_count += 1
+
+        # Setup arrays to hold data
+        timestamps_np = np.zeros((line_count), dtype=object)
+        positions_np = np.zeros((line_count, 3), dtype=object)
+        orientations_np = np.zeros((line_count, 4), dtype=object)
+
+        # Open the txt file and read in the data
+        with open(str(file_path), 'r') as file:
+            for i, line in enumerate(file):
+                line_split = line.split(' ')
+                timestamps_np[i] = line_split[0]
+                positions_np[i] = line_split[1:4]
+                orientations_np[i] = line_split[4:8]
+        
+        # Create an OdometryData class
+        return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
+    
     # =========================================================================
     # ========================= Manipulation Methods ========================== 
     # =========================================================================  
@@ -310,3 +348,67 @@ class OdometryData(Data):
         # Show the plot
         plt.tight_layout()
         plt.show()
+
+    # =========================================================================
+    # =========================== Conversion to ROS =========================== 
+    # ========================================================================= 
+
+    @typechecked
+    @staticmethod
+    def get_ros_msg_type() -> str:
+        """ Return the __msgtype__ for an Imu msg. """
+        typestore = get_typestore(Stores.ROS2_HUMBLE)
+        return typestore.types['nav_msgs/msg/Odometry'].__msgtype__
+
+    @typechecked
+    def get_ros_msg(self, i: int):
+        """
+        Gets an Image ROS2 Humble message corresponding to the odometry in index i.
+        
+        Args:
+            i (int): The index of the odometry data to convert.
+        Raises:
+            ValueError: If i is outside the data bounds.
+        """
+
+        # Check to make sure index is within data bounds
+        if i < 0 or i >= self.len():
+            raise ValueError(f"Index {i} is out of bounds!")
+
+        # Get ROS2 message classes
+        typestore = get_typestore(Stores.ROS2_HUMBLE)
+        Odometry = typestore.types['nav_msgs/msg/Odometry']
+        Header = typestore.types['std_msgs/msg/Header']
+        Time = typestore.types['builtin_interfaces/msg/Time']
+        PoseWithCovariance = typestore.types['geometry_msgs/msg/PoseWithCovariance']
+        Pose = typestore.types['geometry_msgs/msg/Pose']
+        Point = typestore.types['geometry_msgs/msg/Point']
+        Quaternion = typestore.types['geometry_msgs/msg/Quaternion']
+        TwistWithCovariance = typestore.types['geometry_msgs/msg/TwistWithCovariance']
+        Twist = typestore.types['geometry_msgs/msg/Twist']
+        Vector3 = typestore.types['geometry_msgs/msg/Vector3']
+
+        # Get the seconds and nanoseconds
+        seconds = int(self.timestamps[i])
+        nanoseconds = (self.timestamps[i] - self.timestamps[i].to_integral_value(rounding=decimal.ROUND_DOWN)) * Decimal("1e9").to_integral_value(decimal.ROUND_HALF_EVEN)
+
+        # Write the data into the new msg
+        return Odometry(Header(stamp=Time(sec=int(seconds), 
+                                     nanosec=int(nanoseconds)), 
+                          frame_id=self.frame_id),
+                        child_frame_id=self.child_frame_id,
+                        pose=PoseWithCovariance(pose=Pose(position=Point(x=self.positions[i][0],
+                                                                         y=self.positions[i][1],
+                                                                         z=self.positions[i][2]),
+                                                          orientation=Quaternion(x=self.orientations[i][0],
+                                                                                 y=self.orientations[i][1],
+                                                                                 z=self.orientations[i][2],
+                                                                                 w=self.orientations[i][3])),
+                                                covariance=np.zeros(36)),
+                        twist=TwistWithCovariance(twist=Twist(linear=Vector3(x=0, # Currently doesn't support Twist
+                                                                             y=0,
+                                                                             z=0,),
+                                                              angular=Vector3(x=0,
+                                                                             y=0,
+                                                                             z=0,)),
+                                                  covariance=np.zeros(36)))
