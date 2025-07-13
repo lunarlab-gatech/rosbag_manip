@@ -16,7 +16,7 @@ def convert_collection_into_decimal_array(collection: np.ndarray | list) -> np.n
     """
     def safe_decimal(x):
         return Decimal(str(x))
-
+    
     if isinstance(collection, list):
         return np.array([safe_decimal(x) for x in collection], dtype=object)
     elif all(isinstance(x, Decimal) for x in collection.flat):

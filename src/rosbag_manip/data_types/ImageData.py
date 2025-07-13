@@ -216,6 +216,8 @@ class ImageData(Data):
             ImageData: Instance of this class.
         """
 
+        raise NotImplementedError("Sorting in this function is currently broken.")
+
         # Get all png files in the designated folder (sorted)
         img_folder_path = Path(folder_path) / img_folder_name
         all_image_files = [str(p) for p in sorted(Path(img_folder_path).glob("*.png"))]
@@ -236,6 +238,49 @@ class ImageData(Data):
         
         # Create an ImageData class
         return cls(frame_id, timestamps, first_image.height, first_image.width, 
+                   ImageData.ImageEncoding.from_pillow_str(first_image.mode), images)
+    
+    @classmethod
+    @typechecked
+    def from_image_files(cls, image_folder_path: Path | str, frame_id: str):
+        """
+        Creates a class structure from a folder with .png files, using the file names
+        as the timestamps. This is the format that the HERCULES v1.3 dataset provides
+        for image data.
+
+        Args:
+            image_folder_path (Path | str): Path to the folder with the images.
+            frame_id (str): The frame where this image data was collected.
+        Returns:
+            ImageData: Instance of this class.
+        """
+
+        # Get all png files in the designated folder (sorted)
+        all_image_files = [str(p) for p in Path(image_folder_path).glob("*.png")]
+
+        # Extract the timestamps and sort them
+        timestamps = convert_collection_into_decimal_array([s.split('/')[-1][:-4] for s in all_image_files])
+        sorted_indices = np.argsort(timestamps)
+        timestamps_sorted = timestamps[sorted_indices]
+
+        # Use sorted_indices to sort all_image_files in the same way
+        all_image_files_sorted = [all_image_files[i] for i in sorted_indices]
+
+        # Make sure the mode is what we expect
+        first_image = Image.open(all_image_files_sorted[0])
+        if first_image.mode != "RGB":
+            raise NotImplementedError(f"Only RGB mode suppported for 'from_image_files', not \
+                                      {first_image.mode}")
+        
+        # Load the images as numpy arrays
+        images = np.zeros((len(all_image_files_sorted), first_image.height, first_image.width, 3), dtype=np.uint8)
+        pbar = tqdm.tqdm(total=len(all_image_files_sorted), desc="Extracting Images...", unit=" images")
+        for i, path in enumerate(all_image_files_sorted):
+            images[i] = np.array(Image.open(path), dtype=np.uint8)
+            pbar.update()
+
+        # Return an ImageData class
+        return cls(frame_id, timestamps_sorted, first_image.height, first_image.width, 
                    ImageData.ImageEncoding.from_pillow_str(first_image.mode), images)
 
     # =========================================================================

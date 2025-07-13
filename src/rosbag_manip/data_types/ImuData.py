@@ -4,7 +4,10 @@ import decimal
 from decimal import Decimal
 import numpy as np
 from pathlib import Path
+from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
+from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys import Stores, get_typestore
+from rosbags.typesys.store import Typestore
 from typeguard import typechecked
 
 class ImuData(Data):
@@ -12,7 +15,7 @@ class ImuData(Data):
     # Define IMU-specific data attributes
     lin_acc: np.ndarray[Decimal]
     ang_vel: np.ndarray[Decimal]
-    orientation: np.ndarray[Decimal]
+    orientation: np.ndarray[Decimal] # quaternions (x, y, z, w)
 
     @typechecked
     def __init__(self, frame_id: str, timestamps: np.ndarray | list, 
@@ -33,7 +36,60 @@ class ImuData(Data):
     # =========================================================================
     # ============================ Class Methods ============================== 
     # =========================================================================  
-        
+
+    @classmethod
+    @typechecked
+    def from_ros2_bag(cls, bag_path: Path | str, imu_topic: str, frame_id: str):
+        """
+        Creates a class structure from a ROS2 bag file with an Imu topic.
+
+        Args:
+            bag_path (Path | str): Path to the ROS2 bag file.
+            img_topic (str): Topic of the Imu messages.
+            frame_id (str): The frame where this IMU data was collected.
+        Returns:
+            ImageData: Instance of this class.
+        """
+
+        # Get topic message count and typestore
+        bag_wrapper = Ros2BagWrapper(bag_path, None)
+        typestore: Typestore = bag_wrapper.get_typestore()
+        num_msgs: int = bag_wrapper.get_topic_count(imu_topic)
+
+        # Setup arrays to hold data
+        timestamps = np.zeros((num_msgs), dtype=object)
+        lin_acc = np.zeros((num_msgs, 3), dtype=np.double)
+        ang_vel = np.zeros((num_msgs, 3), dtype=np.double)
+        orientation = np.zeros((num_msgs, 4), dtype=np.double)
+
+        # Extract the images/timestamps and save
+        with Reader2(bag_path) as reader: 
+            i = 0
+            connections = [x for x in reader.connections if x.topic == imu_topic]
+            for conn, _, rawdata in reader.messages(connections=connections):
+                msg = typestore.deserialize_cdr(rawdata, conn.msgtype)
+
+                # Extract imu data 
+                lin_acc[i] = np.array([msg.linear_acceleration.x, 
+                                       msg.linear_acceleration.y, 
+                                       msg.linear_acceleration.z], dtype=np.double)
+                ang_vel[i] = np.array([msg.angular_velocity.x, 
+                                       msg.angular_velocity.y, 
+                                       msg.angular_velocity.z], dtype=np.double)
+                orientation[i] = np.array([msg.orientation.x, 
+                                       msg.orientation.y, 
+                                       msg.orientation.z,
+                                       msg.orientation.w], dtype=np.double)
+
+                # Extract timestamps
+                timestamps[i] = Ros2BagWrapper.extract_timestamp(msg)
+
+                # Update the count
+                i += 1
+
+        # Create an ImageData class
+        return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)
+
     @classmethod
     @typechecked
     def from_TartanAir(cls, folder_path: Path | str, frame_id: str):
@@ -45,7 +101,7 @@ class ImuData(Data):
             folder_path (Path | str): Path to the folder containing the IMU data.
             frame_id (str): The frame where this IMU data was collected.
         Returns:
-            ImageData: Instance of this class.
+            ImuData: Instance of this class.
         """
 
         # Get paths to all necessary files
@@ -63,6 +119,52 @@ class ImuData(Data):
         # (whether it's extrinsic or intrinsic euler rotations, etc.)
         # Thus, for now fill with zeros.
         orientation = np.zeros_like(ang_vel)
+
+        # Create the ImuData class
+        return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)
+    
+    @classmethod
+    @typechecked
+    def from_txt_file(cls, file_path: Path | str, frame_id: str):
+        """
+        Creates a class structure from the TartanAir dataset format, which includes
+        various .txt files with IMU data.
+
+        Args:
+            file_path (Path | str): Path to the file containing the IMU data.
+            frame_id (str): The frame where this IMU data was collected.
+        Returns:
+            ImuData: Instance of this class.
+        """
+        
+        # Count the number of lines in the file
+        line_count = 0
+        with open(str(file_path), 'r') as file:
+            for _ in file: 
+                line_count += 1
+
+        # Setup arrays to hold data
+        timestamps = np.zeros((line_count), dtype=object)
+        lin_acc = np.zeros((line_count, 3), dtype=object)
+        ang_vel = np.zeros((line_count, 3), dtype=object)
+
+        # Open the txt file and read in the data
+        with open(str(file_path), 'r') as file:
+            for i, line in enumerate(file):
+                line_split = line.split(' ')
+                timestamps[i] = line_split[0]
+                lin_acc[i] = line_split[1:4]
+                ang_vel[i] = line_split[4:7]
+        
+        # Convert into the proper format
+        timestamps = convert_collection_into_decimal_array(timestamps)
+        lin_acc = convert_collection_into_decimal_array(lin_acc)
+        ang_vel = convert_collection_into_decimal_array(ang_vel)
+
+        # Set orientation to identity, as we don't have orientation from HERCULES IMU
+        orientation = np.zeros((lin_acc.shape[0], 4), dtype=int)
+        orientation[:,3] = np.ones((lin_acc.shape[0]), dtype=int)
+        orientation = convert_collection_into_decimal_array(orientation)
 
         # Create the ImuData class
         return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)

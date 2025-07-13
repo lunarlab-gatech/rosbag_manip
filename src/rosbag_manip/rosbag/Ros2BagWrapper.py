@@ -232,7 +232,7 @@ class Ros2BagWrapper:
         typestore = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS2_HUMBLE, external_msgs_path)
 
         # Open a ROS2 Humble bag for writing
-        with Writer2(str(bag_path)) as writer:
+        with Writer2(str(bag_path), version=5) as writer:
 
             # For each data class
             for i in range(0, len(data_list)):
@@ -248,7 +248,7 @@ class Ros2BagWrapper:
 
                 # Write each of the data entries
                 for j in range(0, data.len()):
-                    msg = data.get_ros_msg(i)
+                    msg = data.get_ros_msg(j)
                     timestamp = int(Ros2BagWrapper.extract_timestamp(msg) * Decimal('1e9'))
                     writer.write(connection, timestamp, typestore.serialize_cdr(msg, msgtype))
                     pbar.update(1)
