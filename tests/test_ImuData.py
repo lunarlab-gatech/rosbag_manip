@@ -21,7 +21,7 @@ class TestImuData(unittest.TestCase):
 
         # Load the IMU data and save it into a ROS2 bag
         file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'imu.txt').absolute()
-        imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link')
+        imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link', CoordinateFrame.ROS)
         bag_path = Path(Path('.'), 'tests', 'test_bags', 'test_from_txt_file', 'imu_bag').absolute()
         if os.path.isdir(bag_path):
             os.remove(bag_path / 'imu_bag.db3')

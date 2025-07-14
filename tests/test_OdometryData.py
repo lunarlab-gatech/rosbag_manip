@@ -16,7 +16,7 @@ class TestOdometryData(unittest.TestCase):
 
         # Load the Odometry data
         file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'odom.txt').absolute()
-        odom_data = OdometryData.from_txt_file(file_path, '/Husky1', '/Husky1/base_link', CoordinateFrame.NED)
+        odom_data = OdometryData.from_txt_file(file_path, '/Husky1', '/Husky1/base_link', CoordinateFrame.ROS)
         bag_path = Path(Path('.'), 'tests', 'test_bags', 'test_from_txt_file', 'odom_bag').absolute()
         if os.path.isdir(bag_path):
             os.remove(bag_path / 'odom_bag.db3')

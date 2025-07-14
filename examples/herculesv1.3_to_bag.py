@@ -10,11 +10,11 @@ def main():
     image_data = ImageData.from_image_files('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/' + robot_name + '/rgb', '' + robot_name + '/front_center_Scene')
 
     # Convert data from NED frame to ROS frame
-    odom_data.to_ROS_frame()
-    imu_data.to_ROS_frame()
+    #odom_data.to_ROS_frame()
+    #imu_data.to_ROS_frame()
 
     # Save it into a ROS2 Humble bag
-    Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T74/Hercules_datasets/V1.3/' + robot_name + '', [imu_data, image_data, odom_data, odom_data], ['/imu', '/cam0', '/odom_gt', '/odom_gt/path'], [None, None, "Odometry", "Path"], None)
+    Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T74/Hercules_datasets/V1.3/' + robot_name + 'NED', [imu_data, image_data, odom_data, odom_data], ['/imu', '/cam0', '/odom_gt', '/odom_gt/path'], [None, None, "Odometry", "Path"], None)
 
 if __name__ == "__main__":
     main()
