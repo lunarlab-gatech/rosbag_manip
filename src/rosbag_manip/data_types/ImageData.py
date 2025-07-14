@@ -10,7 +10,6 @@ from numpy.lib.format import open_memmap
 import os
 from pathlib import Path
 from PIL import Image
-from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore

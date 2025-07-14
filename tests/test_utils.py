@@ -1,5 +1,5 @@
 import os
-import urllib
+import urllib.request
 
 @staticmethod
 def safe_urlretrieve(url, dest_path):

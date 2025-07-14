@@ -2,7 +2,7 @@ import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from rosbag_manip import rosbag_manipulation
+from rosbag_manip import CmdLineInterface
 from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag1 import Reader as Reader1
 from rosbags.rosbag2 import Reader as Reader2
@@ -227,7 +227,7 @@ class TestRosbagManip(unittest.TestCase):
             os.rmdir(path_hercules_bag_down)
 
         # Call the operation to write ROS1 bag
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Get topic occurances for each bag
         topic_counts_orig = TestRosbagManip.count_msgs_in_ros2_bag(self.path_hercules_bag)
@@ -283,7 +283,7 @@ class TestRosbagManip(unittest.TestCase):
             os.remove(path_hercules_bag_ros1)
 
         # Call the operation to write ROS1 bag
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Read the ROS2 bag and count number of messages on each topic
         topic_counts = TestRosbagManip.count_msgs_in_ros2_bag(self.path_hercules_bag)
@@ -341,7 +341,7 @@ class TestRosbagManip(unittest.TestCase):
             os.remove(output_file)
 
         # Call the operation to write the csv file
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Load csv file and check values
         df = pd.read_csv(output_file)
@@ -390,7 +390,7 @@ class TestRosbagManip(unittest.TestCase):
             os.remove(file_path_times)
 
         # Call the operation to write the npy files
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Read the images in the rosbag
         typestore2 = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS2_HUMBLE, self.path_external_msgs_ros2)

@@ -1,4 +1,4 @@
-from .rosbag_manip import rosbag_manipulation
+from .command_line import CmdLineInterface
 import typer
 
 # Setup command line access
@@ -13,7 +13,7 @@ def yaml(yaml_path: str):
     Args:
         yaml_path (str) : Path to the YAML file containing the manipulation configuration.
     """
-    manipulator = rosbag_manipulation.from_yaml(yaml_path)
+    manipulator = CmdLineInterface.from_yaml(yaml_path)
 
 if __name__ == "__main__":
     app()
