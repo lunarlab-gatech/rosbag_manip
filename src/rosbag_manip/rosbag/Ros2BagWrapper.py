@@ -214,7 +214,8 @@ class Ros2BagWrapper:
     @staticmethod
     @typechecked
     def write_data_to_rosbag(bag_path: Path | str, data_list: list[Data], 
-                             data_topics: list[str], external_msgs_path: Path | str | None):
+                             data_topics: list[str], data_msg_type: list[str | None],
+                             external_msgs_path: Path | str | None):
         """
         This helper method writes a new bag with the data in the provided Data classes.
 
@@ -224,6 +225,8 @@ class Ros2BagWrapper:
                 be written into the bag.
             data_topics (list[str]): The topics under which the corresponding Data class's
                 data should be saved.
+            data_msg_type (list[str]): If supported, the corresponding message type that
+                the data class data should be written into.
             external_msgs_path (Path | str | None): Path to the directory containing 
                 external message definitions.
         """
@@ -240,7 +243,8 @@ class Ros2BagWrapper:
                 topic = data_topics[i]
 
                 # Add the new connection
-                msgtype = data.get_ros_msg_type()
+                if data_msg_type[i] is not None: msgtype = data.get_ros_msg_type(data_msg_type[i])
+                else: msgtype = data.get_ros_msg_type()
                 connection = writer.add_connection(topic, msgtype, typestore=typestore)
 
                 # Setup a tqdm bar
@@ -248,7 +252,8 @@ class Ros2BagWrapper:
 
                 # Write each of the data entries
                 for j in range(0, data.len()):
-                    msg = data.get_ros_msg(j)
+                    if data_msg_type[i] is not None: msg = data.get_ros_msg(j, data_msg_type[i])
+                    else: msg = data.get_ros_msg(j)
                     timestamp = int(Ros2BagWrapper.extract_timestamp(msg) * Decimal('1e9'))
                     writer.write(connection, timestamp, typestore.serialize_cdr(msg, msgtype))
                     pbar.update(1)

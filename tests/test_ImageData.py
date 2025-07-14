@@ -77,7 +77,7 @@ class TestImageData(unittest.TestCase):
             os.remove(bag_path / 'rgb_data_bag.db3')
             os.remove(bag_path / 'metadata.yaml')
             os.rmdir(bag_path)
-        Ros2BagWrapper.write_data_to_rosbag(bag_path, [image_data], ['/cam0'], None)
+        Ros2BagWrapper.write_data_to_rosbag(bag_path, [image_data], ['/cam0'], [None], None)
 
         # Load that data directly from the rosbag
         npy_folder = Path(Path('.'), 'tests', 'test_outputs', 'test_from_image_files', 'rgb', 'npy').absolute()

@@ -23,7 +23,7 @@ class TestImuData(unittest.TestCase):
             os.remove(bag_path / 'imu_bag.db3')
             os.remove(bag_path / 'metadata.yaml')
             os.rmdir(bag_path)
-        Ros2BagWrapper.write_data_to_rosbag(bag_path, [imu_data], ['/imu'], None)
+        Ros2BagWrapper.write_data_to_rosbag(bag_path, [imu_data], ['/imu'], [None], None)
 
         # Load the data back again
         ros_data = ImuData.from_ros2_bag(bag_path, '/imu', '/Husky1/base_link')
