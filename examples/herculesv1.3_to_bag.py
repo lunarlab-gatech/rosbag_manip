@@ -1,14 +1,20 @@
-from rosbag_manip import ImageData, ImuData, OdometryData
+from rosbag_manip import ImageData, ImuData, OdometryData, CoordinateFrame
 from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
 
 def main():
+    robot_name = "Husky1"
+
     # Extract RGB and IMU from Hercules v1.3
-    imu_data = ImuData.from_txt_file('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/Husky1/imu.txt', 'Husky1/base_link')
-    odom_data = OdometryData.from_txt_file('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/Husky1/odom.txt', 'world', 'body')
-    image_data = ImageData.from_image_files('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/Husky1/rgb', 'Husky1/front_center_Scene')
+    imu_data = ImuData.from_txt_file('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/' + robot_name + '/imu.txt', '' + robot_name + '/base_link', CoordinateFrame.NED)
+    odom_data = OdometryData.from_txt_file('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/' + robot_name + '/odom.txt', 'world', 'body', CoordinateFrame.NED)
+    image_data = ImageData.from_image_files('/media/dbutterfield3/Expansion/Hercules_Datasets/Archive/hercules_test_datasets_V1.3/test1_2uav2ugv_calib_752x480/' + robot_name + '/rgb', '' + robot_name + '/front_center_Scene')
+
+    # Convert data from NED frame to ROS frame
+    odom_data.to_ROS_frame()
+    imu_data.to_ROS_frame()
 
     # Save it into a ROS2 Humble bag
-    Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T72/Hercules_datasets/V1.3/test1_2uav2ugv_calib_752x480', [imu_data, image_data, odom_data, odom_data], ['/imu', '/cam0', '/odom_gt', '/odom_gt/path'], [None, None, "Odometry", "Path"], None)
+    Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T74/Hercules_datasets/V1.3/' + robot_name + '', [imu_data, image_data, odom_data, odom_data], ['/imu', '/cam0', '/odom_gt', '/odom_gt/path'], [None, None, "Odometry", "Path"], None)
 
 if __name__ == "__main__":
     main()

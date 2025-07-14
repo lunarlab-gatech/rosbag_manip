@@ -2,8 +2,14 @@ from __future__ import annotations
 
 from ..conversion_utils import convert_collection_into_decimal_array
 from decimal import Decimal
+from enum import Enum
 import numpy as np
 from typeguard import typechecked
+
+class CoordinateFrame(Enum):
+    ROS = 0 # https://www.ros.org/reps/rep-0103.html - X forward, Y left, Z up := RHS
+    NED = 1 # https://en.wikipedia.org/wiki/Local_tangent_plane_coordinates
+            # - X forward (north), Y right (East), Z Down := RHS
 
 class Data:
     """
@@ -16,7 +22,7 @@ class Data:
     timestamps: np.ndarray[Decimal]
 
     @typechecked
-    def __init__(self, frame_id: str, timestamps: np.ndarray | list):
+    def __init__(self, frame_id: str, timestamps: np.ndarray | list, ):
         
         # Copy initial values into attributes
         self.frame_id = frame_id

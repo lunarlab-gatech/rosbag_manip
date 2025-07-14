@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from ..conversion_utils import convert_collection_into_decimal_array
 import csv
-from .Data import Data
+from .Data import CoordinateFrame, Data
 import decimal
 from decimal import Decimal
 import matplotlib.pyplot as plt
@@ -22,22 +22,22 @@ class OdometryData(Data):
 
     # Define odometry-specific data attributes
     child_frame_id: str
+    frame: CoordinateFrame
     positions: np.ndarray[Decimal] # meters (x, y, z)
     orientations: np.ndarray[Decimal] # quaternions (x, y, z, w)
-    poses=[] # Saved nav_msgs/msg/Pose
+    poses = [] # Saved nav_msgs/msg/Pose
 
     @typechecked
-    def __init__(self, frame_id: str, child_frame_id: str, timestamps: np.ndarray | list, 
-                 positions: np.ndarray | list, orientations: np.ndarray | list):
+    def __init__(self, frame_id: str, child_frame_id: str, frame: CoordinateFrame, 
+                 timestamps: np.ndarray | list,  positions: np.ndarray | list, 
+                 orientations: np.ndarray | list):
         
         # Copy initial values into attributes
         super().__init__(frame_id, timestamps)
         self.child_frame_id = child_frame_id
+        self.frame = frame
         self.positions = convert_collection_into_decimal_array(positions)
         self.orientations = convert_collection_into_decimal_array(orientations)
-
-        # Calculate the Stamped Poses
-        self.calculate_stamped_poses()
 
         # Check to ensure that all arrays have same length
         if len(self.timestamps) != len(self.positions) or len(self.positions) != len(self.orientations):
@@ -104,11 +104,11 @@ class OdometryData(Data):
                 pbar.update(1)
 
         # Create an OdometryData class
-        return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
+        return cls(frame_id, child_frame_id, CoordinateFrame.ROS, timestamps_np, positions_np, orientations_np)
     
     @classmethod
     @typechecked
-    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str):
+    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame):
         """
         Creates a class structure from a csv file, where the order of values
         in the files follows ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'].
@@ -117,6 +117,7 @@ class OdometryData(Data):
             csv_path (Path | str): Path to the CSV file.
             frame_id (str): The frame that this odometry is relative to.
             child_frame_id (str): The frame whose pose is represented by this odometry.
+            frame (CoordinateFrame): The coordinate system convention of this data.
         Returns:
             OdometryData: Instance of this class.
         """
@@ -132,11 +133,11 @@ class OdometryData(Data):
                                     for qx, qy, qz, qw in zip(df1['qx'], df1['qy'], df1['qz'], df1['qw'])], dtype=object)
 
         # Create an OdometryData class
-        return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
+        return cls(frame_id, child_frame_id, frame, timestamps_np, positions_np, orientations_np)
     
     @classmethod
     @typechecked
-    def from_txt_file(cls, file_path: Path | str, frame_id: str, child_frame_id: str):
+    def from_txt_file(cls, file_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame):
         """
         Creates a class structure from a text file, where the order of values
         in the files follows ['timestamp', 'x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'].
@@ -145,6 +146,7 @@ class OdometryData(Data):
             file_path (Path | str): Path to the file containing the odometry data.
             frame_id (str): The frame where this odometry is relative to.
             child_frame_id (str): The frame whose pose is represented by this odometry.
+            frame (CoordinateFrame): The coordinate system convention of this data.
         Returns:
             OdometryData: Instance of this class.
         """
@@ -169,7 +171,7 @@ class OdometryData(Data):
                 orientations_np[i] = line_split[4:8]
         
         # Create an OdometryData class
-        return cls(frame_id, child_frame_id, timestamps_np, positions_np, orientations_np)
+        return cls(frame_id, child_frame_id, frame, timestamps_np, positions_np, orientations_np)
     
     # =========================================================================
     # ========================= Manipulation Methods ========================== 
@@ -354,6 +356,34 @@ class OdometryData(Data):
         plt.show()
 
     # =========================================================================
+    # =========================== Frame Conversions =========================== 
+    # ========================================================================= 
+    def to_ROS_frame(self):
+        # If we are already in the ROS frame, return
+        if self.frame == CoordinateFrame.ROS:
+            return
+
+        # If in NED, run the conversion
+        elif self.frame == CoordinateFrame.NED:
+            # Define the rotation matrix
+            R_NED = np.array([[1,  0,  0],
+                              [0, -1,  0],
+                              [0,  0, -1]])
+            R_NED_Q = R.from_matrix(R_NED)
+
+            # Rotate positions and orientations
+            self.positions = (R_NED @ self.positions.T).T
+            for i in range(self.len()):
+                self.orientations[i] = (R_NED_Q * R.from_quat(self.orientations[i])).as_quat()
+
+            # Update frame
+            self.frame = CoordinateFrame.ROS
+
+        # Otherwise, throw an error
+        else:
+            raise RuntimeError(f"OdometryData class is in an unexpected frame: {self.frame}!")
+
+    # =========================================================================
     # =========================== Conversion to ROS =========================== 
     # ========================================================================= 
 
@@ -377,29 +407,31 @@ class OdometryData(Data):
         return seconds, nanoseconds
     
     def calculate_stamped_poses(self):
-        # Get ROS2 message types
-        typestore = get_typestore(Stores.ROS2_HUMBLE)
-        Header = typestore.types['std_msgs/msg/Header']
-        Time = typestore.types['builtin_interfaces/msg/Time']
-        PoseStamped = typestore.types['geometry_msgs/msg/PoseStamped']
-        Pose = typestore.types['geometry_msgs/msg/Pose']
-        Point = typestore.types['geometry_msgs/msg/Point']
-        Quaternion = typestore.types['geometry_msgs/msg/Quaternion']
+        """ Pre-calculates all stamped poses if they aren't calculated yet."""
 
-        # Pre-calculate all the poses
-        for i in range(self.len()):
-            seconds, nanoseconds = self.extract_seconds_and_nanoseconds(i)
-            self.poses.append(PoseStamped(Header(stamp=Time(sec=int(seconds), 
-                                                            nanosec=int(nanoseconds)),
-                                                frame_id=self.frame_id),
-                                        pose=Pose(position=Point(x=self.positions[i][0],
-                                                                 y=self.positions[i][1],
-                                                                 z=self.positions[i][2]),
-                        orientation=Quaternion(x=self.orientations[i][0],
-                                                y=self.orientations[i][1],
-                                                z=self.orientations[i][2],
-                                                w=self.orientations[i][3]))))
+        if len(self.poses) != self.len():
+            # Get ROS2 message types
+            typestore = get_typestore(Stores.ROS2_HUMBLE)
+            Header = typestore.types['std_msgs/msg/Header']
+            Time = typestore.types['builtin_interfaces/msg/Time']
+            PoseStamped = typestore.types['geometry_msgs/msg/PoseStamped']
+            Pose = typestore.types['geometry_msgs/msg/Pose']
+            Point = typestore.types['geometry_msgs/msg/Point']
+            Quaternion = typestore.types['geometry_msgs/msg/Quaternion']
 
+            # Pre-calculate all the poses
+            for i in range(self.len()):
+                seconds, nanoseconds = self.extract_seconds_and_nanoseconds(i)
+                self.poses.append(PoseStamped(Header(stamp=Time(sec=int(seconds), 
+                                                                nanosec=int(nanoseconds)),
+                                                    frame_id=self.frame_id),
+                                            pose=Pose(position=Point(x=self.positions[i][0],
+                                                                    y=self.positions[i][1],
+                                                                    z=self.positions[i][2]),
+                            orientation=Quaternion(x=self.orientations[i][0],
+                                                    y=self.orientations[i][1],
+                                                    z=self.orientations[i][2],
+                                                    w=self.orientations[i][3]))))
 
     @typechecked
     def get_ros_msg(self, i: int, msg_type: str = "Odometry"):
@@ -412,9 +444,16 @@ class OdometryData(Data):
             ValueError: If i is outside the data bounds.
         """
 
+        # Calculate the Stamped Poses
+        self.calculate_stamped_poses()
+
+        # Make sure our data is in the ROS frame, otherwise throw an error
+        if self.frame != CoordinateFrame.ROS:
+            raise RuntimeError("Convert this Odometry Data to a ROS frame before writing to a ROS2 bag!")
+
         # Check to make sure index is within data bounds
         if i < 0 or i >= self.len():
-            raise ValueError(f"Index {i} is out of bounds!")
+            raise IndexError(f"Index {i} is out of bounds!")
 
         # Get ROS2 message classes
         typestore = get_typestore(Stores.ROS2_HUMBLE)
@@ -457,6 +496,6 @@ class OdometryData(Data):
             return Path(Header(stamp=Time(sec=int(seconds), 
                                           nanosec=int(nanoseconds)),
                                frame_id=self.frame_id),
-                               poses=self.poses[0:i+1:20])
+                               poses=self.poses[0:i+1:10])
         else:
             raise ValueError(f"Unsupported msg_type for OdometryData: {msg_type}")

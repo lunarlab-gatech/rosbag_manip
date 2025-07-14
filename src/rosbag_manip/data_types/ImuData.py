@@ -1,5 +1,5 @@
 from ..conversion_utils import convert_collection_into_decimal_array
-from .Data import Data
+from .Data import Data, CoordinateFrame
 import decimal
 from decimal import Decimal
 import numpy as np
@@ -8,6 +8,7 @@ from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
+from scipy.spatial.transform import Rotation as R
 from typeguard import typechecked
 
 class ImuData(Data):
@@ -16,14 +17,16 @@ class ImuData(Data):
     lin_acc: np.ndarray[Decimal]
     ang_vel: np.ndarray[Decimal]
     orientation: np.ndarray[Decimal] # quaternions (x, y, z, w)
+    frame: CoordinateFrame
 
     @typechecked
-    def __init__(self, frame_id: str, timestamps: np.ndarray | list, 
+    def __init__(self, frame_id: str, frame: CoordinateFrame, timestamps: np.ndarray | list, 
                  lin_acc: np.ndarray | list, ang_vel: np.ndarray | list,
                  orientation: np.ndarray | list):
         
         # Copy initial values into attributes
         super().__init__(frame_id, timestamps)
+        self.frame = frame
         self.lin_acc = convert_collection_into_decimal_array(lin_acc)
         self.ang_vel = convert_collection_into_decimal_array(ang_vel)
         self.orientation = convert_collection_into_decimal_array(orientation)
@@ -90,7 +93,7 @@ class ImuData(Data):
                 i += 1
 
         # Create an ImageData class
-        return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)
+        return cls(frame_id, CoordinateFrame.ROS, timestamps, lin_acc, ang_vel, orientation)
 
     @classmethod
     @typechecked
@@ -123,11 +126,13 @@ class ImuData(Data):
         orientation = np.zeros_like(ang_vel)
 
         # Create the ImuData class
-        return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)
+        raise NotImplementedError("Need to know coordiante frame of TartanAir.")
+        frame = None
+        return cls(frame_id, frame, timestamps, lin_acc, ang_vel, orientation)
     
     @classmethod
     @typechecked
-    def from_txt_file(cls, file_path: Path | str, frame_id: str):
+    def from_txt_file(cls, file_path: Path | str, frame_id: str, frame: CoordinateFrame):
         """
         Creates a class structure from the TartanAir dataset format, which includes
         various .txt files with IMU data. It expects the timestamp, the linear
@@ -136,6 +141,7 @@ class ImuData(Data):
         Args:
             file_path (Path | str): Path to the file containing the IMU data.
             frame_id (str): The frame where this IMU data was collected.
+            frame (CoordinateFrame): The coordinate system convention of this data.
         Returns:
             ImuData: Instance of this class.
         """
@@ -164,7 +170,36 @@ class ImuData(Data):
         orientation[:,3] = np.ones((lin_acc.shape[0]), dtype=int)
 
         # Create the ImuData class
-        return cls(frame_id, timestamps, lin_acc, ang_vel, orientation)
+        return cls(frame_id, frame, timestamps, lin_acc, ang_vel, orientation)
+
+    # =========================================================================
+    # =========================== Frame Conversions =========================== 
+    # ========================================================================= 
+    def to_ROS_frame(self):
+        # If we are already in the ROS frame, return
+        if self.frame == CoordinateFrame.ROS:
+            return
+
+        # If in NED, run the conversion
+        elif self.frame == CoordinateFrame.NED:
+            # Define the rotation matrix
+            R_NED = np.array([[1,  0,  0],
+                              [0, -1,  0],
+                              [0,  0, -1]])
+            R_NED_Q = R.from_matrix(R_NED)
+
+            # Rotate data
+            self.lin_acc = (R_NED @ self.lin_acc.T).T
+            self.ang_vel = (R_NED @ self.ang_vel.T).T
+            for i in range(self.len()):
+                self.orientation[i] = (R_NED_Q * R.from_quat(self.orientation[i])).as_quat()
+
+            # Update frame
+            self.frame = CoordinateFrame.ROS
+
+        # Otherwise, throw an error
+        else:
+            raise RuntimeError(f"ImuData class is in an unexpected frame: {self.frame}!")
 
     # =========================================================================
     # =========================== Conversion to ROS =========================== 
@@ -191,6 +226,10 @@ class ImuData(Data):
         # Check to make sure index is within data bounds
         if i < 0 or i >= self.len():
             raise ValueError(f"Index {i} is out of bounds!")
+
+        # Make sure our data is in the ROS frame, otherwise throw an error
+        if self.frame != CoordinateFrame.ROS:
+            raise RuntimeError("Convert this IMU Data to a ROS coordinate frame before writing to a ROS2 bag!")
 
         # Get ROS2 message classes
         typestore = get_typestore(Stores.ROS2_HUMBLE)
