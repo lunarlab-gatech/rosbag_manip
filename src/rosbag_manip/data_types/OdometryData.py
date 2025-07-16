@@ -140,7 +140,7 @@ class OdometryData(Data):
     def from_txt_file(cls, file_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame):
         """
         Creates a class structure from a text file, where the order of values
-        in the files follows ['timestamp', 'x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'].
+        in the files follows ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'].
 
         Args:
             file_path (Path | str): Path to the file containing the odometry data.
@@ -168,7 +168,7 @@ class OdometryData(Data):
                 line_split = line.split(' ')
                 timestamps_np[i] = line_split[0]
                 positions_np[i] = line_split[1:4]
-                orientations_np[i] = line_split[4:8]
+                orientations_np[i] =  line_split[5:8] + [line_split[4]]
         
         # Create an OdometryData class
         return cls(frame_id, child_frame_id, frame, timestamps_np, positions_np, orientations_np)
@@ -222,6 +222,24 @@ class OdometryData(Data):
         self.positions[:,0] += Decimal(x_shift)
         self.positions[:,1] += Decimal(y_shift)
         self.positions[:,2] += Decimal(z_shift)
+
+    def shift_to_start_at_identity(self):
+        """
+        Alter the positions and orientations based so that the first pose 
+        starts at Identity.
+        """
+
+        # Get pose of first robot position w.r.t world
+        R_o = R.from_quat(self.orientations[0]).as_matrix()
+        T_o = np.expand_dims(self.positions[0], axis=1)
+        
+        # Calculate the inverse (pose of world w.r.t first robot location)
+        R_inv = R_o.T
+
+        # Rotate positions and orientations
+        self.positions = (R_inv @ (self.positions.T - T_o).astype(float)).T
+        for i in range(self.len()):
+            self.orientations[i] = R.from_matrix((R_inv @ R.from_quat(self.orientations[i]).as_matrix())).as_quat()
 
     # =========================================================================
     # ============================ Export Methods ============================= 
@@ -361,6 +379,7 @@ class OdometryData(Data):
     def to_ROS_frame(self):
         # If we are already in the ROS frame, return
         if self.frame == CoordinateFrame.ROS:
+            print("Data already in ROS coordinate frame, returning...")
             return
 
         # If in NED, run the conversion
@@ -371,10 +390,10 @@ class OdometryData(Data):
                               [0,  0, -1]])
             R_NED_Q = R.from_matrix(R_NED)
 
-            # Rotate positions and orientations
+            # Do a change of basis
             self.positions = (R_NED @ self.positions.T).T
             for i in range(self.len()):
-                self.orientations[i] = (R_NED_Q * R.from_quat(self.orientations[i])).as_quat()
+                self.orientations[i] = (R_NED_Q * R.from_quat(self.orientations[i]) * R_NED_Q.inv()).as_quat()
 
             # Update frame
             self.frame = CoordinateFrame.ROS

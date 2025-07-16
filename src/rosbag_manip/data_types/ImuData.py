@@ -178,6 +178,7 @@ class ImuData(Data):
     def to_ROS_frame(self):
         # If we are already in the ROS frame, return
         if self.frame == CoordinateFrame.ROS:
+            print("Data already in ROS coordinate frame, returning...")
             return
 
         # If in NED, run the conversion
@@ -188,11 +189,12 @@ class ImuData(Data):
                               [0,  0, -1]])
             R_NED_Q = R.from_matrix(R_NED)
 
-            # Rotate data
+            # Do a change of basis 
+            raise NotImplementedError("Not sure if this should be a pose transformation or change of basis")
             self.lin_acc = (R_NED @ self.lin_acc.T).T
             self.ang_vel = (R_NED @ self.ang_vel.T).T
             for i in range(self.len()):
-                self.orientation[i] = (R_NED_Q * R.from_quat(self.orientation[i])).as_quat()
+                self.orientation[i] = (R_NED_Q * R.from_quat(self.orientation[i]) * R_NED_Q.inv()).as_quat()
 
             # Update frame
             self.frame = CoordinateFrame.ROS

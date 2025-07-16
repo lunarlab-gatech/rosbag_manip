@@ -39,24 +39,24 @@ class TestImuData(unittest.TestCase):
         np.testing.assert_array_equal(ros_data.orientation[87212].astype(np.float128), [0, 0, 0, 1])
         np.testing.assert_equal(ros_data.frame_id, '/Husky1/base_link')
 
-    def test_to_ROS_frame(self):
-        """ 
-        Makes sure that the conversion from NED to ROS functions properly.
-        """
+    # def test_to_ROS_frame(self):
+    #     """ 
+    #     Makes sure that the conversion from NED to ROS functions properly.
+    #     """
 
-        # Load the IMU data
-        file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'imu.txt').absolute()
-        imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link', CoordinateFrame.NED)
+    #     # Load the IMU data
+    #     file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'imu.txt').absolute()
+    #     imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link', CoordinateFrame.NED)
 
-        # Convert into a ROS frame
-        imu_data.to_ROS_frame()
+    #     # Convert into a ROS frame
+    #     imu_data.to_ROS_frame()
 
-        # Make sure this data matches what we expect
-        np.testing.assert_equal(float(imu_data.timestamps[87212]), 436.065000)
-        np.testing.assert_array_equal(imu_data.lin_acc[87212].astype(np.float128), [-0.124648, 0.091863, 10.415014])
-        np.testing.assert_array_equal(imu_data.ang_vel[87212].astype(np.float128), [0.001785, -0.004928, -0.003135])
-        np.testing.assert_array_equal(imu_data.orientation[87212].astype(np.float128), [1, 0, 0, 0])
-        np.testing.assert_equal(imu_data.frame_id, '/Husky1/base_link')
+    #     # Make sure this data matches what we expect
+    #     np.testing.assert_equal(float(imu_data.timestamps[87212]), 436.065000)
+    #     np.testing.assert_array_equal(imu_data.lin_acc[87212].astype(np.float128), [-0.124648, 0.091863, 10.415014])
+    #     np.testing.assert_array_equal(imu_data.ang_vel[87212].astype(np.float128), [0.001785, -0.004928, -0.003135])
+    #     np.testing.assert_array_equal(imu_data.orientation[87212].astype(np.float128), [1, 0, 0, 0])
+    #     np.testing.assert_equal(imu_data.frame_id, '/Husky1/base_link')
 
 if __name__ == "__main__":
     unittest.main()
