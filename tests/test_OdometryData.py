@@ -1,9 +1,9 @@
 import numpy as np
 import os
 from pathlib import Path
-from rosbag_manip import CoordinateFrame
-from rosbag_manip.data_types.OdometryData import OdometryData
-from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
+from robotdataprocess import CoordinateFrame
+from robotdataprocess.data_types.OdometryData import OdometryData
+from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 import unittest
 
 class TestOdometryData(unittest.TestCase):
@@ -16,7 +16,7 @@ class TestOdometryData(unittest.TestCase):
 
         # Load the Odometry data
         file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'odom.txt').absolute()
-        odom_data = OdometryData.from_txt_file(file_path, '/Husky1', '/Husky1/base_link', CoordinateFrame.NED)
+        odom_data = OdometryData.from_txt_file(file_path, '/Husky1', '/Husky1/base_link', CoordinateFrame.ROS)
         bag_path = Path(Path('.'), 'tests', 'test_bags', 'test_from_txt_file', 'odom_bag').absolute()
         if os.path.isdir(bag_path):
             os.remove(bag_path / 'odom_bag.db3')
@@ -28,8 +28,6 @@ class TestOdometryData(unittest.TestCase):
 
         # Load the data back again
         ros_data = OdometryData.from_ros2_bag(bag_path, '/odom')
-        ros_data.to_ROS_frame()
-        ros_data.to_ROS_frame()
 
         # Make sure this data matches what we expect
         np.testing.assert_equal(float(ros_data.timestamps[13801]), 690.100000)

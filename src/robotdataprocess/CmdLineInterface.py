@@ -16,11 +16,11 @@ class CmdLineInterface():
 
     def __init__(self, **kwargs):
         """
-        Initialize the rosbag manipulator with the provided keyword arguments,
-        which is assumed to be a dictionary containing the manipulation configuration.
+        Initialize the interface with the provided keyword arguments,
+        which is assumed to be a dictionary.
 
         Args:
-            **kwargs: Keyword arguments containing the manipulation configuration, including:
+            **kwargs: Keyword arguments containing the configuration, including:
                 - 'input_bag': Path to the input ROS2 bag file.
                 - 'output_bag': Path to the output ROS2 bag file, if necessary.
                 - 'operation_params': Dictionary containing operation parameters for specific manipulations.
@@ -35,41 +35,28 @@ class CmdLineInterface():
         # Create a ROS2 bag wrapper
         self.bag_wrapper = Ros2BagWrapper(self.input_bag, self.external_msgs_path_ros2)
 
-        # Setup dictionary to store msg instances
-        self.ros1_msg_instances = {}
-
         # Run desired operation
-        self.run_operation()
+        function = getattr(self, self.operation_to_run)
+        function()
 
     @classmethod
     def from_yaml(cls, yaml_path: str):
         """
-        Create a rosbag manipulator from a YAML file.
+        Initialize the CmdLineInterface from a YAML file.
 
         Args:
-            yaml_path (str): Path to the YAML file containing the manipulation configuration.
+            yaml_path (str): Path to the configuration.
         """
         with open(yaml_path, "r") as yaml_file:
             yaml_dict = yaml.safe_load(yaml_file)
             return cls(**yaml_dict)
 
-    def run_operation(self):
-        """
-        Load the operation to run from 'self.operation_to_run' and execute it.
-
-        Used Attributes:
-            self.operation_to_run (str): The name of the operation to run, which should be a method of this class.
-        """
-        function = getattr(self, self.operation_to_run)
-        function()
-
+    # ===============================================================
+    # ======================== Operations ===========================
+    # ===============================================================
 
     def hertz_analysis(self):
-        """
-        Analyze the hertz of various topics in a ROS2 bag file. Will output
-        a histogram of the hertz for each pair of consecutive messages
-        for the specified topic, and another histogram of the time differences.
-        """
+        """ Analyze the hertz of various topics in a ROS2 bag. """
 
         # Extract operation specific parameters
         topic: str = self.operation_params['hertz_analysis']['topic']
@@ -82,9 +69,7 @@ class CmdLineInterface():
         self.bag_wrapper.hertz_analysis(topic, output_folder, expected_msgs, max_msgs, robot_name)
 
     def view_imu_data(self):
-        """
-        Plot the linear acceleration data of an IMU topic in a ROS2 bag.
-        """
+        """ Plot IMU data contained in a ROS2 bag. """
 
         # Extract operation specific parameters
         topic: str = self.operation_params['view_imu_data']['topic']
@@ -100,11 +85,7 @@ class CmdLineInterface():
         self.bag_wrapper.view_imu_data(topic, output_folder, expected_msgs, data_range)
 
     def downsample(self):
-        """
-        Downsample a ROS2 bag file by downsampling the frequency of specified topics. Additionally
-        includes or excludes unmentioned topics based on `include_unmentioned_topics` parameter, which
-        can be used to prune topics.
-        """
+        """ Downsample a ROS2 bag file. """
 
         # Extract operation specific parameters
         topic_downsample_ratios: dict = self.operation_params['downsample']['topics'].copy()
@@ -117,6 +98,11 @@ class CmdLineInterface():
         start_ts: float = self.operation_params['crop']['start_ts']
         end_ts: float = self.operation_params['crop']['end_ts']
         self.bag_wrapper.crop(self.output_bag, start_ts, end_ts)
+
+    def convert_ros2_to_ros1(self):
+        """ Convert a ROS2 bag from the bag wrapper into a ROS1 bag. """
+
+        self.bag_wrapper.export_as_ros1(self.output_bag, self.external_msgs_path_ros1)
 
     def extract_odometry_to_csv(self):
         """ Extract odometry from a ROS2 bag and save in a csv file. """
@@ -140,7 +126,7 @@ class CmdLineInterface():
 
         topic: str = self.operation_params['extract_images_to_npy']['topic']
         output_folder: str = self.operation_params['extract_images_to_npy']['output_folder']
-        ImageData.from_ros2_bag(self.bag_wrapper, topic, output_folder)
+        ImageData.from_ros2_bag(self.input_bag, topic, output_folder)
 
     def compare_timestamps_two_image_data(self):
         """ Compare timestamps between two ImageData instances. """
@@ -148,8 +134,3 @@ class CmdLineInterface():
         data0 = ImageData.from_npy(self.operation_params['compare_timestamps_two_image_data']['folder_0'])
         data1 = ImageData.from_npy(self.operation_params['compare_timestamps_two_image_data']['folder_1'])
         data0.compare_timestamps(data1)
-
-    def convert_ros2_to_ros1(self):
-        """ Convert a ROS2 bag from the bag wrapper into a ROS1 bag. """
-
-        self.bag_wrapper.export_as_ros1(self.output_bag, self.external_msgs_path_ros1)

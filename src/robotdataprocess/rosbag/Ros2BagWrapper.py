@@ -1,6 +1,4 @@
 from ..data_types.Data import Data
-from ..data_types.ImageData import ImageData
-from ..data_types.OdometryData import OdometryData
 from collections import defaultdict
 from decimal import Decimal
 import glob
@@ -223,7 +221,7 @@ class Ros2BagWrapper:
 
     def view_imu_data(self, topic: str, output_folder: str, expected_msgs: int | None, data_range: tuple[int] | None):
         """
-        Plot the linear acceleration data of an IMU topic in a ROS2 bag.
+        Plot the linear acceleration, angular velocity, and orientation data of an IMU topic in a ROS2 bag.
 
         Args:
             topic (str): The topic to read the IMU data from; must be 'sensor_msgs/msg/Imu'.

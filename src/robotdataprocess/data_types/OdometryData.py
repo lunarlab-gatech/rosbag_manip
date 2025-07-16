@@ -10,6 +10,7 @@ import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
+from ..rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag2 import Reader as Reader2
 from rosbags.typesys import Stores, get_typestore
 from rosbags.typesys.store import Typestore
@@ -48,18 +49,19 @@ class OdometryData(Data):
 
     @classmethod
     @typechecked
-    def from_ros2_bag(cls, bag_wrapper, odom_topic: str):
+    def from_ros2_bag(cls, bag_path: Path | str, odom_topic: str):
         """
         Creates a class structure from a ROS2 bag file with an Odometry topic.
 
         Args:
-            bag_wrapper (Ros2BagWrapper): The Ros2BagWrapper object for the bag.
+            bag_path (Path | str): Path to the ROS2 bag file.
             odom_topic (str): Topic of the Odometry messages.
         Returns:
             OdometryData: Instance of this class.
         """
 
         # Get topic message count and typestore
+        bag_wrapper = Ros2BagWrapper(bag_path, None)
         typestore: Typestore = bag_wrapper.get_typestore()
         num_msgs: int = bag_wrapper.get_topic_count(odom_topic)
         
@@ -74,7 +76,7 @@ class OdometryData(Data):
 
         # Extract the odometry information
         frame_id, child_frame_id = None, None
-        with Reader2(str(bag_wrapper.bag_path)) as reader:
+        with Reader2(str(bag_path)) as reader:
 
             # Extract frames from first message
             connections = [x for x in reader.connections if x.topic == odom_topic]
