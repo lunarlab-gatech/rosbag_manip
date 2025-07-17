@@ -1,4 +1,4 @@
-from rosbag_manip.data_types.OdometryData import OdometryData
+from robotdataprocess.data_types.OdometryData import OdometryData
 
 def main():
     # Load csv files

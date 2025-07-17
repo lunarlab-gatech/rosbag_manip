@@ -3,8 +3,8 @@ from decimal import Decimal
 import numpy as np
 import os
 from pathlib import Path
-from rosbag_manip.data_types.ImageData import ImageData
-from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
+from robotdataprocess.data_types.ImageData import ImageData
+from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 from test_utils import safe_urlretrieve
 import unittest
 

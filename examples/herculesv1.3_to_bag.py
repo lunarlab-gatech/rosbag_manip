@@ -1,5 +1,5 @@
-from rosbag_manip import ImageData, ImuData, OdometryData, CoordinateFrame
-from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
+from robotdataprocess import ImageData, ImuData, OdometryData, CoordinateFrame
+from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 
 def main():
     robot_name = "Drone1"

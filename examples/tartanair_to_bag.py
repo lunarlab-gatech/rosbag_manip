@@ -1,6 +1,6 @@
-from rosbag_manip.data_types.ImageData import ImageData
-from rosbag_manip.data_types.ImuData import ImuData
-from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
+from robotdataprocess.data_types.ImageData import ImageData
+from robotdataprocess.data_types.ImuData import ImuData
+from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 
 def main():
     # Extract data from TartanGround Dataset

@@ -2,25 +2,21 @@ import os
 import numpy as np
 import pandas as pd
 from pathlib import Path
-from rosbag_manip import rosbag_manipulation
-from rosbag_manip.rosbag.Ros2BagWrapper import Ros2BagWrapper
+from robotdataprocess import CmdLineInterface
+from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 from rosbags.rosbag1 import Reader as Reader1
 from rosbags.rosbag2 import Reader as Reader2
-from rosbags.typesys import Stores, get_typestore
+from rosbags.typesys import Stores
 from test_utils import safe_urlretrieve
 import unittest
-import urllib.request
 
-class TestRosbagManip(unittest.TestCase):
+class TestCmdLineInterface(unittest.TestCase):
     """
-    Test the rosbag_manip functionality.
+    Test the functionality of the command line interface.
     """
     
     def setUp(self):
-        """ 
-        Setup paths and download files that will be used 
-        for all tests.
-        """
+        """ Setup paths and download files that will be used for all tests. """
 
         # Get paths to test bags & external messages
         self.path_hercules_bag = Path(Path('.'), 'tests', 'test_bags', 'hercules_test_bag_pruned_3').absolute()
@@ -56,9 +52,7 @@ class TestRosbagManip(unittest.TestCase):
         return topic_counts
 
     def assert_two_msgs_match(self, ros1_bag: Path, ros2_bag: Path, topic: str):
-        """
-        Given a topic, manually check that the values in each message match.
-        """
+        """ Given a topic, manually check that the values in each message match. """
         
         # Setup Typestores
         typestore1 = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS1_NOETIC, self.path_external_msgs_ros1)
@@ -179,9 +173,7 @@ class TestRosbagManip(unittest.TestCase):
                 raise NotImplementedError(f"Tests are not implemented for this topic: {topic}")
 
     def test_downsample(self):
-        """
-        Test that we can properly downsample and prune topics.
-        """
+        """ Test that we can properly downsample and prune topics. """
 
         # Define path to a new pruned & downsampled ros2 bag
         path_hercules_bag_down = self.path_hercules_bag.parent / 'hercules_test_bag_downsampled'
@@ -227,11 +219,11 @@ class TestRosbagManip(unittest.TestCase):
             os.rmdir(path_hercules_bag_down)
 
         # Call the operation to write ROS1 bag
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Get topic occurances for each bag
-        topic_counts_orig = TestRosbagManip.count_msgs_in_ros2_bag(self.path_hercules_bag)
-        topic_counts_new = TestRosbagManip.count_msgs_in_ros2_bag(path_hercules_bag_down)
+        topic_counts_orig = TestCmdLineInterface.count_msgs_in_ros2_bag(self.path_hercules_bag)
+        topic_counts_new = TestCmdLineInterface.count_msgs_in_ros2_bag(path_hercules_bag_down)
 
         # Assert that the number of messages is now the ratio that we specified
         topics_in_orig = list(topic_counts_orig.keys())
@@ -283,10 +275,10 @@ class TestRosbagManip(unittest.TestCase):
             os.remove(path_hercules_bag_ros1)
 
         # Call the operation to write ROS1 bag
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Read the ROS2 bag and count number of messages on each topic
-        topic_counts = TestRosbagManip.count_msgs_in_ros2_bag(self.path_hercules_bag)
+        topic_counts = TestCmdLineInterface.count_msgs_in_ros2_bag(self.path_hercules_bag)
 
         # Read the ROS1 bag and count the number of messages as well
         topic_counts_ros1 = {}
@@ -341,7 +333,7 @@ class TestRosbagManip(unittest.TestCase):
             os.remove(output_file)
 
         # Call the operation to write the csv file
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Load csv file and check values
         df = pd.read_csv(output_file)
@@ -390,7 +382,7 @@ class TestRosbagManip(unittest.TestCase):
             os.remove(file_path_times)
 
         # Call the operation to write the npy files
-        self.manipulator = rosbag_manipulation(**config_dict)
+        self.manipulator = CmdLineInterface(**config_dict)
 
         # Read the images in the rosbag
         typestore2 = Ros2BagWrapper._create_typestore_with_external_msgs(Stores.ROS2_HUMBLE, self.path_external_msgs_ros2)
