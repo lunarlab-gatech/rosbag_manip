@@ -1,10 +1,10 @@
-# rosbag_manipulation
+# robotdataprocess
 
-[![Python Unit Tests](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml/badge.svg?branch=master)](https://github.com/lunarlab-gatech/rosbag_manip/actions/workflows/python_test.yml) [![Coverage Status](https://coveralls.io/repos/github/lunarlab-gatech/rosbag_manip/badge.svg?branch=master)](https://coveralls.io/github/lunarlab-gatech/rosbag_manip?branch=master)
+[![Python Unit Tests](https://github.com/lunarlab-gatech/robotdataprocess/actions/workflows/python_test.yml/badge.svg?branch=master)](https://github.com/lunarlab-gatech/robotdataprocess/actions/workflows/python_test.yml) [![Coverage Status](https://coveralls.io/repos/github/lunarlab-gatech/robotdataprocess/badge.svg?branch=master)](https://coveralls.io/github/lunarlab-gatech/robotdataprocess?branch=master)
 
-A set of tools for manipulation ROS2 bags in a deterministic manner, meant to fill a void in current tools. For example, `ros2 bag convert` doesn't have options for downsampling or cropping the bag within a certain timeframe (even though the latter is implied by the documentation). 
+A library for loading, saving, converting, and manipulating robotic datasets.
 
-Currently, the library assumes the ROS2 bags have messages from ROS2 Humble, and for converting to ROS1 bags, the output bag will be compatible with ROS1 Noetic.
+Currently, for operations with rosbags, the library inputs and outputs ROS2 Humble bags. For converting to ROS1 bags, the output bag will be compatible with ROS1 Noetic.
 
 **WARNING:** Currently, this repository is in active development and functionality isn't guaranteed to work. If you will depend on this repository for important tasks, perhaps write test cases for the corresponding functionality before deployment/use.
 
@@ -19,58 +19,52 @@ pip install .
 
 ## Example Use
 
-See use cases for this repository below. For more information on all the specific operation parameters, see the `config/explanation.yaml` file.
+### Command Line Examples
 
-### Downsampling
-
-This functionality allows downsampling the hertz rates of topics in the bag (for example, 40 Hz to 5 Hz). It can also prune topics by setting `include_unmentioned_topics` to false. See an example command below for this functionality:
+See use cases for this repository below. For more information on specific operations, see the corresponding config file. All of these operations can be launched by running the following command below (or a similar one):
 ```
-rosbag_manip <repository_path>/config/downsample.yaml
+robotdataprocess <repository_path>/config/<operation name.yaml
 ```
 
-### Hertz Analysis
-In order to generate histograms with an analysis of the hertz rates for a specific topic, run a command similar to the following:
-```
-rosbag_manip <repository_path>/config/hertz_analysis.yaml
-```
+#### Hertz Analysis
+Generate histograms with an analysis of the hertz rates for a specific topic. If you want to investigate the `/tf` or `/tf_static` topic, these contain headers per transform, and thus you need to specify the name of the robot, as shown in `config/hertz_analysis_tf.yaml`.
 
-If you want to investigate the `/tf` or `/tf_static` topic, these contain headers per transform, and thus you need to specify the name of the robot, as show below. Note we assume that transform you want to investigate is `{robot_name}/odom_local`:
-```
-rosbag_manip <repository_path>/config/hertz_analysis_tf.yaml
-```
+#### View IMU Data
+Plot the linear acceleration, angular velocity, and orientation data of an IMU topic in a ROS2 bag.
 
-### Crop
-A rosbag can be cropped to only include message written into the bag within a certain timeframe with this feature. Note that this doesn't take into account the timestamps inside the messages. An example command for this functionality is as follows:
-```
-rosbag_manip <repository_path>/config/crop.yaml
-```
+#### Downsample (& Prune)
 
-### ROS2 to ROS1 conversion
-A ROS2 bag can be converted to ROS1 with this functionality, note that only certain message types are supported. When running the command, any unsuported message types will print a warning message. 
-```
-rosbag_manip <repository_path>/config/convert_ros2_to_ros1.yaml
-```
+This functionality allows downsampling the hertz rates of topics in the bag (for example, 40 Hz to 5 Hz). It can also prune topics by setting `include_unmentioned_topics` to false. 
 
-Note that support for more messages can be easily added by altering `get_mapping()` and `msg_mapping_ros2_to_ros1` in `rosbag_manip.py`. Here is a list of all currently supported msg types:
-```python
-"builtin_interfaces/msg/Time"
-"geometry_msgs/msg/Point"
-"geometry_msgs/msg/Pose"
-"geometry_msgs/msg/PoseWithCovariance"
-"geometry_msgs/msg/Quaternion"
-"geometry_msgs/msg/Transform"
-"geometry_msgs/msg/TransformStamped"
-"geometry_msgs/msg/Twist"
-"geometry_msgs/msg/TwistWithCovariance"
-"geometry_msgs/msg/Vector3"
-"nav_msgs/msg/Odometry"
-"sensor_msgs/msg/Image"
-"sensor_msgs/msg/Imu"
-"sensor_msgs/msg/CameraInfo"
-"sensor_msgs/msg/RegionOfInterest"
-"std_msgs/msg/Header"
-"tf2_msgs/msg/TFMessage"
-```
+#### Crop
+A ROS2 bag can be cropped to only include message written into the bag within a certain timeframe with this feature. Note that this doesn't take into account the timestamps inside the messages, but just the recieve time of the messages.
+
+#### ROS2 to ROS1 conversion
+A ROS2 bag can be converted to ROS1 with this functionality, note that only certain message types are supported (see `msg_mapping_ros2_to_ros1` in `Ros2BagWrapper.py` for all supported messages). When running the command, any unsuported message types will print a warning message. 
+
+Note that support for more messages can be easily added by altering `get_mapping()` and `msg_mapping_ros2_to_ros1` in `Ros2BagWrapper.py`.
+
+#### Extract Odometry to CSV
+Extract odometry from a ROS2 bag and save in a csv file.
+
+#### Extract Images to Npy
+Extract images from a ROS2 bag and saves them into .npy files. 
+
+#### Compare Timestamps between two sets of Image Data
+Compare timestamps between two sets of image data, loaded from .npy files.
+
+### Code Examples
+
+As robotic data can be saved in a variety of formats, the code structure is transitioning towards data objects that represent a data type. Thus, a data type can be loaded from a variety of formats, manipulated or visualized in various ways, and then exported into a new format.
+
+Various examples of doing this can be seen in the `examples` directory. For any specific type of data, see its corresponding data class in the `src/robotdataprocess/data_types` directory.
+
+For example, `OdometryData` can:
+- Load from ROS2 bag, CSV file, or TXT file.
+- Add noise or shift position.
+- Export to ROS2 bag or CSV file.
+- Visualize various OdometryData classes as paths via matplotlib.
+- Convert from NED to ROS frame.
 
 ## Validation
 
@@ -78,7 +72,7 @@ Note that support for more messages can be easily added by altering `get_mapping
 
 Run the following command to run the unit tests and generate a code coverage report:
 ```
-coverage run --source rosbag_manip -m unittest discover tests/ -v
+coverage run --source robotdataprocess -m unittest discover tests/ -v
 coverage report
 coverage html
 ```
