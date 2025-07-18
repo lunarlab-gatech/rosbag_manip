@@ -1,6 +1,6 @@
 [project]
 name = "robotdataprocess"
-version = "0.0.3"
+version = "0.1.0"
 authors = [
   { name="Daniel Butterfield", email="danielcbutter@gmail.com" },
 ]
