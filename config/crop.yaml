@@ -6,4 +6,4 @@ operation_to_run: 'crop'
 operation_params:
   crop:
     start_ts: 1749131354.349346016
-    end_ts:   1749131454.349346016
+    end_ts:   1749131464.349346016

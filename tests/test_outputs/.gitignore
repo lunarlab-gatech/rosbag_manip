@@ -1,0 +1,5 @@
+*.npy
+*.txt
+*.csv
+!test_from_txt_file/imu.txt
+!test_from_txt_file/odom.txt

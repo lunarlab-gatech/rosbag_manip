@@ -1,10 +1,10 @@
 [project]
-name = "rosbag_manip"
-version = "0.0.3"
+name = "robotdataprocess"
+version = "0.1.0"
 authors = [
   { name="Daniel Butterfield", email="danielcbutter@gmail.com" },
 ]
-description = "A library for manipulation ROS2 bags in a deterministic manner."
+description = "A library for loading, saving, converting, and manipulating robotic datasets."
 readme = "README.md"
 requires-python = ">=3.10"
 classifiers = [
@@ -14,10 +14,15 @@ classifiers = [
 dependencies = ["coverage",
                 "matplotlib",
                 "numpy",
+                "opencv-python",
                 "rosbags",
+                "scipy",
                 "snakeviz",
                 "tqdm",
+                "typeguard",
                 "typer",
+                "pandas",
+                "pillow",
                 "pyyaml"]
 
 # == License information TBD ==
@@ -25,12 +30,12 @@ dependencies = ["coverage",
 # license-files = ["LICEN[CS]E*"]
 
 [project.urls]
-Homepage = "https://github.com/lunarlab-gatech/rosbag_manip"
-Issues = "https://github.com/lunarlab-gatech/rosbag_manip/issues"
+Homepage = "https://github.com/lunarlab-gatech/robotdataprocess"
+Issues = "https://github.com/lunarlab-gatech/robotdataprocess/issues"
 
 [build-system]
 requires = ["hatchling >= 1.26"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-rosbag_manip = "rosbag_manip.__main__:app"
+robotdataprocess = "robotdataprocess.__main__:app"
