@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from ..conversion_utils import convert_collection_into_decimal_array
+import cv2
 from .Data import Data
 import decimal
 from decimal import Decimal
@@ -22,12 +23,15 @@ class ImageData(Data):
 
     # Define image encodings enum
     class ImageEncoding(Enum):
-        RGB8 = 0
-        _32FC1 = 1
+        Mono8 = 0
+        RGB8 = 1
+        _32FC1 = 2
     
         @classmethod
         def from_str(cls, encoding_str: str):
-            if encoding_str == "ImageEncoding.RGB8":
+            if encoding_str == "ImageEncoding.Mono8":
+                return cls.Mono8
+            elif encoding_str == "ImageEncoding.RGB8":
                 return cls.RGB8
             elif encoding_str == "ImageEncoding._32FC1":
                 return cls._32FC1
@@ -37,7 +41,9 @@ class ImageData(Data):
         @classmethod
         def from_ros_str(cls, encoding_str: str):
             encoding_str = encoding_str.lower()
-            if encoding_str == 'rgb8':
+            if encoding_str == 'mono8':
+                return ImageData.ImageEncoding.Mono8
+            elif encoding_str == 'rgb8':
                 return ImageData.ImageEncoding.RGB8
             elif encoding_str == "32fc1":
                 return ImageData.ImageEncoding._32FC1
@@ -53,9 +59,11 @@ class ImageData(Data):
             
         @staticmethod
         def to_ros_str(encoding: ImageData.ImageEncoding):
-            if encoding == ImageData.ImageEncoding.RGB8:
+            if encoding == ImageData.ImageEncoding.Mono8:
+                return 'mono8'
+            elif encoding == ImageData.ImageEncoding.RGB8:
                 return 'rgb8'
-            if encoding == ImageData.ImageEncoding._32FC1:
+            elif encoding == ImageData.ImageEncoding._32FC1:
                 return '32FC1'
             else:
                 raise NotImplementedError(f"This ImageData.ImageEncoding.{encoding} is not yet implemented (or it doesn't exist)!")
@@ -282,6 +290,44 @@ class ImageData(Data):
         # Return an ImageData class
         return cls(frame_id, timestamps_sorted, first_image.height, first_image.width, 
                    ImageData.ImageEncoding.from_pillow_str(first_image.mode), images)
+    
+    # =========================================================================
+    # ============================ Export Methods ============================= 
+    # ========================================================================= 
+
+    @typechecked
+    def to_image_files(self, output_folder_path: Path | str):
+        """
+        Saves each image in this ImageData instance to the specified folder,
+        using the timestamps as filenames in .png format (lossless compression).
+
+        Args:
+            output_folder_path (Path | str): The folder to save images into.
+        """
+
+        # Setup the output directory
+        output_path = Path(output_folder_path)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Check that the encoding is Mono8
+        if self.encoding != ImageData.ImageEncoding.Mono8:
+            raise NotImplementedError(f"Only Mono8 encoding currently supported for export, not {self.encoding}")
+
+        # Setup a progress bar
+        pbar = tqdm.tqdm(total=self.images.shape[0], desc="Saving Images...", unit=" images")
+
+        # Save each image
+        for i, timestamp in enumerate(self.timestamps):
+            # Format timestamp to match input expectations
+            filename = f"{timestamp:.9f}" + ".png"
+            file_path = output_path / filename
+
+            # Save as lossless PNG with default compression
+            img = Image.fromarray(self.images[i], mode="L")
+            img.save(file_path, format="PNG", compress_level=1)
+            pbar.update()
+
+        pbar.close()
 
     # =========================================================================
     # ============================ Image Decoding ============================= 
@@ -297,6 +343,8 @@ class ImageData(Data):
             NotImplementedError: If this mapping hasn't been defined
         """
         match encoding:
+            case ImageData.ImageEncoding.Mono8:
+                return (np.uint8, 1)
             case ImageData.ImageEncoding.RGB8:
                 return (np.uint8, 3)
             case ImageData.ImageEncoding._32FC1:
@@ -324,7 +372,7 @@ class ImageData(Data):
             return np.frombuffer(msg.data, dtype=dtype).reshape((height, width))
         
     # =========================================================================
-    # ========================= Timestamp comparison ========================== 
+    # ======================= Multi ImageData Methods ========================= 
     # ========================================================================= 
 
     def compare_timestamps(self, other: ImageData):
@@ -349,6 +397,72 @@ class ImageData(Data):
         print(f"Mean distance (right): {np.mean(np.abs(self.timestamps - other.timestamps[idxs_right]))}")
         print(f"Mean distance: {np.mean(dists)}")
         print(f"Std distance: {np.std(dists)}")
+
+    @typechecked
+    def stereo_undistort_and_rectify(self: ImageData, other: ImageData,
+            K1: np.ndarray, D1: np.ndarray, K2: np.ndarray, D2: np.ndarray, 
+            R: np.ndarray, T: np.ndarray) -> Tuple[ImageData, ImageData, np.ndarray, np.ndarray]:
+        """
+        Undistort and rectify stereo images using stereo calibration parameters. 
+        Note that self NEEDS to be the left stereo image sequence.
+
+        Args:
+            other (ImageData): The right stereo image sequence.
+            K1, D1: Intrinsics and distortion for left camera.
+            K2, D2: Intrinsics and distortion for right camera.
+            R, T: Rotation and translation from left to right camera.
+
+        Returns:
+            Tuple[ImageData, ImageData, np.ndarray, np.ndarray]: Rectified left and right 
+                ImageData, and new Instrinsics matrices for the left and right cameras.
+        """
+
+        # Make sure the ImageData sequences are compatible
+        assert self.width == other.width and self.height == other.height and self.encoding == other.encoding, \
+            "Left and right images must have the same resolution and encoding."
+
+        # Find matching timestamps between self and other
+        set_self = set(self.timestamps)
+        set_other = set(other.timestamps)
+        common_timestamps = sorted(set_self.intersection(set_other))
+        if len(common_timestamps) == 0:
+            raise ValueError("No matching timestamps between left and right images.")
+        
+        # Find indices of matching timestamps in each ImageData
+        left_indices = [np.where(self.timestamps == ts)[0][0] for ts in common_timestamps]
+        right_indices = [np.where(other.timestamps == ts)[0][0] for ts in common_timestamps]
+
+        # Image size
+        image_size = (self.width, self.height)
+
+        # Compute rectification transforms
+        R1, R2, P1, P2, Q, _, _ = cv2.stereoRectify(K1, D1, K2, D2, image_size, R, T, flags=cv2.CALIB_ZERO_DISPARITY, alpha=0)
+
+        # Compute intrinsics of rectified imagery
+        K1_new = P1[:, :3]
+        K2_new = P2[:, :3]
+        print("New left camera intrinsics after rectification:\n",  K1_new)
+        print("New right camera intrinsics after rectification:\n", K2_new)
+        print("Distortion coefficients after rectification are zero.")
+
+        # Compute rectification maps
+        map1_x, map1_y = cv2.initUndistortRectifyMap(K1, D1, R1, P1, image_size, cv2.CV_32FC1)
+        map2_x, map2_y = cv2.initUndistortRectifyMap(K2, D2, R2, P2, image_size, cv2.CV_32FC1)
+
+        # Allocate arrays for rectified images (only matching pairs)
+        left_rectified = np.zeros((len(common_timestamps), self.height, self.width, *self.images.shape[3:]), dtype=self.images.dtype)
+        right_rectified = np.zeros((len(common_timestamps), other.height, other.width, *other.images.shape[3:]), dtype=other.images.dtype)
+
+        # Rectify/Undistort each image pair
+        for i, (li, ri) in enumerate(tqdm.tqdm(zip(left_indices, right_indices), total=len(common_timestamps), desc="Rectifying stereo pairs")):
+            left_rectified[i] = cv2.remap(self.images[li], map1_x, map1_y, interpolation=cv2.INTER_LINEAR)
+            right_rectified[i] = cv2.remap(other.images[ri], map2_x, map2_y, interpolation=cv2.INTER_LINEAR)
+
+        # Return new ImageData instances with rectified images and matched timestamps
+        left = ImageData(self.frame_id, np.array(common_timestamps), self.height, self.width, self.encoding, left_rectified)
+        right = ImageData(other.frame_id, np.array(common_timestamps), other.height, other.width, other.encoding, right_rectified)
+        return left, right, K1_new, K2_new
+
 
     # =========================================================================
     # =========================== Conversion to ROS =========================== 
