@@ -39,9 +39,9 @@ class Ros2BagWrapper:
         """
 
         # Ensure both attributes end up as paths (if possible)
-        if type(bag_path) == str: self.bag_path = Path(bag_path)
+        if isinstance(bag_path, str): self.bag_path = Path(bag_path)
         else: self.bag_path = bag_path
-        if type(external_msgs_path) == str: self.external_msgs_path = Path(external_msgs_path)
+        if isinstance(external_msgs_path, str): self.external_msgs_path = Path(external_msgs_path)
         else: self.external_msgs_path = external_msgs_path
 
         # Create ROS2 Typestore
