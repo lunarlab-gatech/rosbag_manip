@@ -26,7 +26,8 @@ class ImageData(Data):
         Mono8 = 0
         RGB8 = 1
         _32FC1 = 2
-    
+
+        # ================ Class Methods ================
         @classmethod
         def from_str(cls, encoding_str: str):
             if encoding_str == "ImageEncoding.Mono8":
@@ -42,21 +43,35 @@ class ImageData(Data):
         def from_ros_str(cls, encoding_str: str):
             encoding_str = encoding_str.lower()
             if encoding_str == 'mono8':
-                return ImageData.ImageEncoding.Mono8
+                return cls.Mono8
             elif encoding_str == 'rgb8':
-                return ImageData.ImageEncoding.RGB8
+                return cls.RGB8
             elif encoding_str == "32fc1":
-                return ImageData.ImageEncoding._32FC1
+                return cls._32FC1
             else:
                 raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
         
         @classmethod
+        def from_dtype_and_channels(cls, dtype: np.dtype, channels: int):
+            if dtype == np.uint8 and channels == 1:
+                return cls.Mono8
+            elif dtype == np.uint8 and channels == 3:
+                return cls.RGB8
+            elif dtype == np.float32 and channels == 1:
+                return cls._32FC1
+            else:
+                raise NotImplementedError(f"dtype {dtype} w/ {channels} channel(s) has no corresponding encoding!")
+        
+        @classmethod
         def from_pillow_str(cls, encoding_str: str):
             if encoding_str == "RGB":
-                return ImageData.ImageEncoding.RGB8
+                return cls.RGB8
+            elif encoding_str == "L":
+                return cls.Mono8
             else:
                 raise NotImplementedError(f"This encoding ({encoding_str}) is not yet implemented (or it doesn't exist)!")
-            
+        
+        # ================ Export Methods ================
         @staticmethod
         def to_ros_str(encoding: ImageData.ImageEncoding):
             if encoding == ImageData.ImageEncoding.Mono8:
@@ -67,6 +82,19 @@ class ImageData(Data):
                 return '32FC1'
             else:
                 raise NotImplementedError(f"This ImageData.ImageEncoding.{encoding} is not yet implemented (or it doesn't exist)!")
+        
+        @staticmethod
+        def to_dtype_and_channels(encoding):
+            match encoding:
+                case ImageData.ImageEncoding.Mono8:
+                    return (np.uint8, 1)
+                case ImageData.ImageEncoding.RGB8:
+                    return (np.uint8, 3)
+                case ImageData.ImageEncoding._32FC1:
+                    return (np.float32, 1)
+                case _:
+                    raise NotImplementedError(f"This encoding ({encoding}) is missing a mapping to dtype/channels!")
+            
 
 
     # Define image-specific data attributes
@@ -206,48 +234,58 @@ class ImageData(Data):
 
         # Create an ImageData class
         return cls(frame_id, np.load(ts_path), height, width, encoding, np.load(imgs_path, mmap_mode='r+'))
-    
+
     @classmethod
     @typechecked
-    def from_TartanAir(cls, folder_path: Path | str, img_folder_name: str, ts_folder_name: str,
-                       frame_id: str):
+    def from_npy_files(cls, npy_folder_path: Path | str, frame_id: str):
         """
-        Creates a class structure from the TartanAir dataset format, which includes
-        images as .png files in a folder and timestamps as part of the pose file.
+        Creates a class structure from .npy files, where each individual image
+        is stored in an .npy file with the timestamp as the name
 
         Args:
-            folder_path (Path | str): Path to the folder containing the TartanAir sequence.
-            img_folder_name (str): Name of the folder containing the .png files.
-            ts_folder_name (str): Name of the folder containing 'cam_time.npy'.
+            npy_folder_path (Path | str): Path to the folder with the npy images.
             frame_id (str): The frame where this image data was collected.
         Returns:
             ImageData: Instance of this class.
         """
 
-        raise NotImplementedError("Sorting in this function is currently broken.")
-
         # Get all png files in the designated folder (sorted)
-        img_folder_path = Path(folder_path) / img_folder_name
-        all_image_files = [str(p) for p in sorted(Path(img_folder_path).glob("*.png"))]
+        all_image_files = [str(p) for p in Path(npy_folder_path).glob("*.npy")]
 
-        # Make sure the mode is what we expect
-        first_image = Image.open(all_image_files[0])
-        if first_image.mode != "RGB":
-            raise NotImplementedError(f"Only RGB mode suppported for 'from_TartanAir', not \
-                                      {first_image.mode}")
+        # Extract the timestamps and sort them
+        timestamps = convert_collection_into_decimal_array([s.split('/')[-1][:-4] for s in all_image_files])
+        sorted_indices = np.argsort(timestamps)
+        timestamps_sorted = timestamps[sorted_indices]
 
-        # Load the images as numpy arrays
-        images = np.zeros((len(all_image_files), first_image.height, first_image.width, 3), dtype=np.uint8)
-        for i, path in enumerate(all_image_files):
-            images[i] = np.array(Image.open(path), dtype=np.uint8)
+        # Use sorted_indices to sort all_image_files in the same way
+        all_image_files_sorted = [all_image_files[i] for i in sorted_indices]
 
-        # Load the corresponding timestamps
-        timestamps = convert_collection_into_decimal_array(np.load(Path(folder_path) / ts_folder_name / 'cam_time.npy'))
+        # Extract width, height, and channels
+        first_image = np.load(all_image_files_sorted[0], 'r')
+        assert len(first_image.shape) >= 2
+        assert len(first_image.shape) < 4
+        height = first_image.shape[0]
+        width = first_image.shape[1]
+        channels = 1
+        if len(first_image.shape) > 2: 
+            channels = first_image.shape[2]
+
+        # Extract mode and make sure it matches the supported type for this operation
+        encoding = ImageData.ImageEncoding.from_dtype_and_channels(first_image.dtype, channels)
+        if encoding != ImageData.ImageEncoding._32FC1:
+            raise NotImplementedError(f"Only ImageData.ImageEncoding._32FC1 mode suppported \
+                                      for 'from_npy_files', not {encoding}")
         
-        # Create an ImageData class
-        return cls(frame_id, timestamps, first_image.height, first_image.width, 
-                   ImageData.ImageEncoding.from_pillow_str(first_image.mode), images)
-    
+        # Load the images as numpy arrays
+        images = np.zeros((len(all_image_files_sorted), height, width), dtype=np.float32)
+        pbar = tqdm.tqdm(total=len(all_image_files_sorted), desc="Extracting Images...", unit=" images")
+        for i, path in enumerate(all_image_files_sorted):
+            images[i] = np.load(path, 'r')
+            pbar.update()
+
+        # Return an ImageData class
+        return cls(frame_id, timestamps_sorted, height, width, encoding, images)
+
     @classmethod
     @typechecked
     def from_image_files(cls, image_folder_path: Path | str, frame_id: str):
@@ -276,24 +314,116 @@ class ImageData(Data):
 
         # Make sure the mode is what we expect
         first_image = Image.open(all_image_files_sorted[0])
-        if first_image.mode != "RGB":
-            raise NotImplementedError(f"Only RGB mode suppported for 'from_image_files', not \
-                                      {first_image.mode}")
+        encoding = ImageData.ImageEncoding.from_pillow_str(first_image.mode)
+        if encoding != ImageData.ImageEncoding.RGB8 and encoding != ImageData.ImageEncoding.Mono8:
+            raise NotImplementedError(f"Only RGB8 & Mono8 suppported for 'from_image_files', not \
+                                      {encoding}")
         
+        # Get dtype and channels based on the encoding
+        dtype, channels = ImageData.ImageEncoding.to_dtype_and_channels(encoding)
+
+        # Define the image array shape
+        if channels == 1:
+            img_arr_shape = (len(all_image_files_sorted), first_image.height, first_image.width)
+        else: 
+            img_arr_shape = (len(all_image_files_sorted), first_image.height, first_image.width, channels)
+
         # Load the images as numpy arrays
-        images = np.zeros((len(all_image_files_sorted), first_image.height, first_image.width, 3), dtype=np.uint8)
+        images = np.zeros(img_arr_shape, dtype=dtype)
         pbar = tqdm.tqdm(total=len(all_image_files_sorted), desc="Extracting Images...", unit=" images")
         for i, path in enumerate(all_image_files_sorted):
-            images[i] = np.array(Image.open(path), dtype=np.uint8)
+            images[i] = np.array(Image.open(path), dtype=dtype)
             pbar.update()
 
         # Return an ImageData class
-        return cls(frame_id, timestamps_sorted, first_image.height, first_image.width, 
-                   ImageData.ImageEncoding.from_pillow_str(first_image.mode), images)
+        return cls(frame_id, timestamps_sorted, first_image.height, first_image.width, encoding, images)
     
+    # =========================================================================
+    # ========================= Manipulation Methods ========================== 
+    # =========================================================================  
+
+    @typechecked
+    def downscale_by_factor(self, scale: int):
+        """
+        Scales down all images by the provided factor.
+
+        Args:
+            scale (int): The downscaling factor. Must evenly divide both height and width.
+        """
+
+        if self.height % scale != 0 or self.width % scale != 0:
+            raise ValueError(f"Scale factor {scale} must evenly divide both height ({self.height}) and width ({self.width})")
+        
+        # Calculate new height/width
+        self.height = self.height // scale
+        self.width = self.width // scale
+
+        # Ensure we're working with Mono8 data
+        if self.encoding != ImageData.ImageEncoding.Mono8:
+            raise NotImplementedError(f"This method is only currently implemented for Mono8 data, not {self.encoding}!")
+
+        # Determine the number of channels in the image
+        if len(self.images.shape) == 4: channels = self.images.shape[3]
+        else: channels = 1
+
+        # Create a new array to hold the resized images
+        if channels == 1:
+            rescaled_images = np.zeros((self.len(), self.height, self.width), dtype=self.images.dtype)
+        else:
+            rescaled_images = np.zeros((self.len(), self.height, self.width, channels), dtype=self.images.dtype)
+        
+        # Resize each image
+        for i in range(self.len()):
+            rescaled_images[i] = cv2.resize(self.images[i], (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+        self.images = rescaled_images
+
     # =========================================================================
     # ============================ Export Methods ============================= 
     # ========================================================================= 
+
+    @typechecked
+    def to_npy(self, output_folder_path: Path | str):
+        """
+        Saves each image in this ImageData into three files:
+        - imgs.npy (with image data)
+        - times.npy (with timestamps)
+        - attributes.txt
+
+        Args:
+            output_folder_path (Path | str): The folder to save the .npy file at.
+        """
+
+        # Setup the output directory
+        output_path = Path(output_folder_path)
+        output_path.mkdir(parents=True, exist_ok=True)
+
+        # Check that the encoding is supported
+        if self.encoding != ImageData.ImageEncoding._32FC1 and self.encoding != ImageData.ImageEncoding.Mono8:
+            raise NotImplementedError(f"Only _32FC1 & Mono8 encoding currently supported for export, not {self.encoding}")
+
+        # Get dtype and channels
+        dtype, channels = ImageData.ImageEncoding.to_dtype_and_channels(self.encoding)
+
+        # Save images into memory-mapped array
+        img_memmap = open_memmap(str(Path(output_folder_path) / "imgs.npy"), dtype=dtype, 
+                                 shape=(self.len(), self.height, self.width), mode='w+')
+        pbar = tqdm.tqdm(total=self.len(), desc="Saving Images...", unit=" images")
+        for i in range(self.len()):
+            img_memmap[i] = self.images[i]
+            pbar.update()
+        img_memmap.flush()
+
+        # Save the timestamps
+        np.save(str(Path(output_folder_path) / "times.npy"), self.timestamps.astype(np.float128), allow_pickle=False)
+
+        # Save attributes
+        with open(str(Path(output_folder_path) / "attributes.txt"), "w") as f:
+            f.write(f"image_shape: ({self.height},{self.width})\n")
+            f.write(f"frame_id: {self.frame_id}\n")
+            f.write(f"height: {self.height}\n")
+            f.write(f"width: {self.width}\n")
+            f.write(f"encoding: {self.encoding}\n")
+
 
     @typechecked
     def to_image_files(self, output_folder_path: Path | str):
@@ -333,26 +463,6 @@ class ImageData(Data):
     # ============================ Image Decoding ============================= 
     # ========================================================================= 
 
-    
-    @staticmethod
-    def _map_encoding_to_dtype_and_channels(encoding: ImageData.ImageEncoding) -> Tuple[type, int]:
-        """ 
-        Helper method that maps an image encoding to the corresponding dtype and channels.
-        
-        Raises:
-            NotImplementedError: If this mapping hasn't been defined
-        """
-        match encoding:
-            case ImageData.ImageEncoding.Mono8:
-                return (np.uint8, 1)
-            case ImageData.ImageEncoding.RGB8:
-                return (np.uint8, 3)
-            case ImageData.ImageEncoding._32FC1:
-                return (np.float32, 1)
-            case _:
-                raise NotImplementedError(f"This encoding ({encoding}) is missing a mapping to dtype/channels!")
-            
-
     @staticmethod
     @typechecked
     def _decode_image_msg(msg: object, encoding: ImageData.ImageEncoding, height: int, width: int):
@@ -365,7 +475,7 @@ class ImageData(Data):
             height (int): Height of the image.
             width (int): Width of the image .
         """
-        dtype, channels = ImageData._map_encoding_to_dtype_and_channels(encoding)
+        dtype, channels = ImageData.ImageEncoding.to_dtype_and_channels(encoding)
         if channels > 1:
             return np.frombuffer(msg.data, dtype=dtype).reshape((height, width, channels)) 
         else:
