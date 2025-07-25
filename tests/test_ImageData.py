@@ -8,7 +8,6 @@ from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 from test_utils import safe_urlretrieve
 import unittest
 
-
 class TestImageData(unittest.TestCase):
     
     def setUp(self):
@@ -69,6 +68,7 @@ class TestImageData(unittest.TestCase):
         rosbag results in the same data as just loading the image directly.
         """
 
+        # === Test with RGB8 Images ===
         # Load the image data with the class and save to a ROS2 bag
         files_folder = Path(Path('.'), 'tests', 'test_outputs', 'test_from_image_files', 'rgb').absolute()
         image_data = ImageData.from_image_files(files_folder, 'Husky1/front_center_Scene')
@@ -91,9 +91,10 @@ class TestImageData(unittest.TestCase):
         np.testing.assert_equal(ImageData.ImageEncoding.RGB8, image_data_after.encoding)
 
         # Manually load a couple images to compare image data
-        def manual_cv2_load(path):
-            image_bgr = cv2.imread(path)
-            return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        def manual_cv2_load(path, cvt=True):
+            image_bgr = cv2.imread(path, cv2.IMREAD_UNCHANGED)
+            if cvt: return cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+            else: return image_bgr
 
         images = np.zeros((3, 480, 752, 3), dtype=np.uint8)
         images[0] = manual_cv2_load(files_folder / "0.050000.png")
@@ -104,6 +105,26 @@ class TestImageData(unittest.TestCase):
         np.testing.assert_array_equal(images[0], image_data_after.images[0])
         np.testing.assert_array_equal(images[1], image_data_after.images[6])
         np.testing.assert_array_equal(images[2], image_data_after.images[194])
+
+        # === Test with Mono8 Images ===
+        path = Path('.')/'tests'/'files'/'test_ImageData'/'test_from_image_files'/'mono8'
+        image_data = ImageData.from_image_files(path.absolute(), 'callie')
+
+        images = np.zeros((1, 652, 1196), dtype=np.uint8)
+        images[0] = manual_cv2_load(path / "0.0.png", False)
+
+        np.testing.assert_array_equal(images, image_data.images)
+        np.testing.assert_array_equal([0.0], image_data.timestamps.astype(np.float128))
+        np.testing.assert_equal('callie', image_data.frame_id)
+        np.testing.assert_equal(652, image_data.height)
+        np.testing.assert_equal(1196, image_data.width)
+        np.testing.assert_equal(ImageData.ImageEncoding.Mono8, image_data.encoding)
+
+        # === Unsupported Formats ===
+        # Test that it properly detects an unsupported format
+        path = Path('.')/'tests'/'files'/'test_ImageData'/'test_from_image_files'/'rgba'
+        with np.testing.assert_raises(NotImplementedError):
+            _ = ImageData.from_image_files(path.absolute(), 'N/A')
 
 if __name__ == "__main__":
     unittest.main()

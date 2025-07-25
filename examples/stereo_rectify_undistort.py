@@ -4,14 +4,10 @@ from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 
 def main():
     # Extract stereo imagery from GRaCo dataset
-    left_data = ImageData.from_npy('/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-04-extract/npy/left')
-    right_data = ImageData.from_npy('/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-04-extract/npy/right')
-
-    # Keep only first 10 images of each
-    # left_data.images = left_data.images[0:10]
-    # left_data.timestamps = left_data.timestamps[0:10]
-    # right_data.images = right_data.images[0:10]
-    # right_data.timestamps = right_data.timestamps[0:10]
+    left_data = ImageData.from_ros2_bag('/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-05', '/camera_left/image_raw', '/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-05-extract/npy/left')
+    right_data = ImageData.from_ros2_bag('/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-05', '/camera_right/image_raw', '/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-05-extract/npy/right')
+    # left_data = ImageData.from_npy('/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-04-extract/npy/left')
+    # right_data = ImageData.from_npy('/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-04-extract/npy/right')
 
     # Define camera intrinsics
     K1 = np.array([[940.862825677534,                0, 799.1626975233576],
@@ -34,8 +30,8 @@ def main():
     left_rectified, right_rectified, K1_new, K2_new = left_data.stereo_undistort_and_rectify(right_data, K1, D1, K2, D2, R, T)
 
     # Save as raw image files
-    left_rectified.to_image_files("/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-04-extract/left_rectified")
-    right_rectified.to_image_files("/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-04-extract/right_rectified")
+    left_rectified.to_image_files("/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-05-extract/left_rectified")
+    right_rectified.to_image_files("/media/dbutterfield3/T75/Graco_Datasets/ground/ros2/ground-05-extract/right_rectified")
 
 if __name__ == "__main__":
     main()

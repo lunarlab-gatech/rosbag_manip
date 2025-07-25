@@ -31,7 +31,7 @@ class Data:
         # Check to ensure that all timestamps are sequential
         for i in range(len(self.timestamps) - 1):
             if self.timestamps[i] >= self.timestamps[i+1]:
-                raise ValueError("Timestamps do not come in sequential order!")
+                raise ValueError(f"Timestamps {self.timestamps[i]} and {self.timestamps[i+1]} do not come in sequential order!")
             
     def len(self):
         """ Returns the number of items in this data class """
