@@ -313,11 +313,11 @@ class ImageData(Data):
         all_image_files_sorted = [all_image_files[i] for i in sorted_indices]
 
         # Make sure the mode is what we expect
-        first_image = Image.open(all_image_files_sorted[0])
-        encoding = ImageData.ImageEncoding.from_pillow_str(first_image.mode)
-        if encoding != ImageData.ImageEncoding.RGB8 and encoding != ImageData.ImageEncoding.Mono8:
-            raise NotImplementedError(f"Only RGB8 & Mono8 suppported for 'from_image_files', not \
-                                      {encoding}")
+        with Image.open(all_image_files_sorted[0]) as first_image:
+            encoding = ImageData.ImageEncoding.from_pillow_str(first_image.mode)
+            if encoding != ImageData.ImageEncoding.RGB8 and encoding != ImageData.ImageEncoding.Mono8:
+                raise NotImplementedError(f"Only RGB8 & Mono8 suppported for 'from_image_files', not \
+                                        {encoding}")
         
         # Get dtype and channels based on the encoding
         dtype, channels = ImageData.ImageEncoding.to_dtype_and_channels(encoding)
