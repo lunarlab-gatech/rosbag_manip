@@ -339,6 +339,45 @@ class ImageData(Data):
         return cls(frame_id, timestamps_sorted, first_image.height, first_image.width, encoding, images)
     
     # =========================================================================
+    # ========================= Manipulation Methods ========================== 
+    # =========================================================================  
+
+    @typechecked
+    def downscale_by_factor(self, scale: int):
+        """
+        Scales down all images by the provided factor.
+
+        Args:
+            scale (int): The downscaling factor. Must evenly divide both height and width.
+        """
+
+        if self.height % scale != 0 or self.width % scale != 0:
+            raise ValueError(f"Scale factor {scale} must evenly divide both height ({self.height}) and width ({self.width})")
+        
+        # Calculate new height/width
+        self.height = self.height // scale
+        self.width = self.width // scale
+
+        # Ensure we're working with Mono8 data
+        if self.encoding != ImageData.ImageEncoding.Mono8:
+            raise NotImplementedError(f"This method is only currently implemented for Mono8 data, not {self.encoding}!")
+
+        # Determine the number of channels in the image
+        if len(self.images.shape) == 4: channels = self.images.shape[3]
+        else: channels = 1
+
+        # Create a new array to hold the resized images
+        if channels == 1:
+            rescaled_images = np.zeros((self.len(), self.height, self.width), dtype=self.images.dtype)
+        else:
+            rescaled_images = np.zeros((self.len(), self.height, self.width, channels), dtype=self.images.dtype)
+        
+        # Resize each image
+        for i in range(self.len()):
+            rescaled_images[i] = cv2.resize(self.images[i], (self.width, self.height), interpolation=cv2.INTER_LINEAR)
+        self.images = rescaled_images
+
+    # =========================================================================
     # ============================ Export Methods ============================= 
     # ========================================================================= 
 
