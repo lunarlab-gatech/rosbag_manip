@@ -29,7 +29,7 @@ class OdometryData(Data):
 
     @typechecked
     def __init__(self, frame_id: str, child_frame_id: str, frame: CoordinateFrame, 
-                 timestamps: np.ndarray | list,  positions: np.ndarray | list, 
+                 timestamps: np.ndarray | list, positions: np.ndarray | list, 
                  orientations: np.ndarray | list):
         
         # Copy initial values into attributes
@@ -104,7 +104,7 @@ class OdometryData(Data):
                 pbar.update(1)
 
         # Create an OdometryData class
-        return cls(frame_id, child_frame_id, CoordinateFrame.ROS, timestamps_np, positions_np, orientations_np)
+        return cls(frame_id, child_frame_id, CoordinateFrame.FLU, timestamps_np, positions_np, orientations_np)
     
     @classmethod
     @typechecked
@@ -376,10 +376,10 @@ class OdometryData(Data):
     # =========================================================================
     # =========================== Frame Conversions =========================== 
     # ========================================================================= 
-    def to_ROS_frame(self):
-        # If we are already in the ROS frame, return
-        if self.frame == CoordinateFrame.ROS:
-            print("Data already in ROS coordinate frame, returning...")
+    def to_FLU_frame(self):
+        # If we are already in the FLU frame, return
+        if self.frame == CoordinateFrame.FLU:
+            print("Data already in FLU coordinate frame, returning...")
             return
 
         # If in NED, run the conversion
@@ -396,7 +396,7 @@ class OdometryData(Data):
                 self.orientations[i] = (R_NED_Q * R.from_quat(self.orientations[i]) * R_NED_Q.inv()).as_quat()
 
             # Update frame
-            self.frame = CoordinateFrame.ROS
+            self.frame = CoordinateFrame.FLU
 
         # Otherwise, throw an error
         else:
@@ -466,9 +466,9 @@ class OdometryData(Data):
         # Calculate the Stamped Poses
         self.calculate_stamped_poses()
 
-        # Make sure our data is in the ROS frame, otherwise throw an error
-        if self.frame != CoordinateFrame.ROS:
-            raise RuntimeError("Convert this Odometry Data to a ROS frame before writing to a ROS2 bag!")
+        # Make sure our data is in the FLU frame, otherwise throw an error
+        if self.frame != CoordinateFrame.FLU:
+            raise RuntimeError("Convert this Odometry Data to a FLU frame before writing to a ROS2 bag!")
 
         # Check to make sure index is within data bounds
         if i < 0 or i >= self.len():

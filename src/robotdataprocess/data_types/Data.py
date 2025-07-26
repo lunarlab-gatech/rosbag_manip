@@ -7,9 +7,10 @@ import numpy as np
 from typeguard import typechecked
 
 class CoordinateFrame(Enum):
-    ROS = 0 # https://www.ros.org/reps/rep-0103.html - X forward, Y left, Z up := RHS
+    FLU = 0 # https://www.ros.org/reps/rep-0103.html - X forward, Y left, Z up := RHS
     NED = 1 # https://en.wikipedia.org/wiki/Local_tangent_plane_coordinates
             # - X forward (north), Y right (East), Z Down := RHS
+    ENU = 2 # https://www.ros.org/reps/rep-0103.html - X east, Y north, Z up := RHS
 
 class Data:
     """

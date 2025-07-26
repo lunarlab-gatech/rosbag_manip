@@ -14,7 +14,7 @@ def main():
     odom_data.shift_to_start_at_identity()
 
     # Leave the IMU data in the NED frame (I believe that VINS-Mono actually adjusts internally)
-    imu_data.frame = CoordinateFrame.ROS
+    imu_data.frame = CoordinateFrame.FLU
 
     # Save it into a ROS2 Humble bag
     Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T75/Hercules_datasets/V1.3/' + robot_name,

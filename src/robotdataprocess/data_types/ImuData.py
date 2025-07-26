@@ -93,7 +93,7 @@ class ImuData(Data):
                 i += 1
 
         # Create an ImageData class
-        return cls(frame_id, CoordinateFrame.ROS, timestamps, lin_acc, ang_vel, orientation)
+        return cls(frame_id, CoordinateFrame.FLU, timestamps, lin_acc, ang_vel, orientation)
 
     @classmethod
     @typechecked
@@ -175,10 +175,10 @@ class ImuData(Data):
     # =========================================================================
     # =========================== Frame Conversions =========================== 
     # ========================================================================= 
-    def to_ROS_frame(self):
-        # If we are already in the ROS frame, return
-        if self.frame == CoordinateFrame.ROS:
-            print("Data already in ROS coordinate frame, returning...")
+    def to_FLU_frame(self):
+        # If we are already in the FLU frame, return
+        if self.frame == CoordinateFrame.FLU:
+            print("Data already in FLU coordinate frame, returning...")
             return
 
         # If in NED, run the conversion
@@ -197,7 +197,7 @@ class ImuData(Data):
                 self.orientation[i] = (R_NED_Q * R.from_quat(self.orientation[i]) * R_NED_Q.inv()).as_quat()
 
             # Update frame
-            self.frame = CoordinateFrame.ROS
+            self.frame = CoordinateFrame.FLU
 
         # Otherwise, throw an error
         else:
@@ -229,9 +229,9 @@ class ImuData(Data):
         if i < 0 or i >= self.len():
             raise ValueError(f"Index {i} is out of bounds!")
 
-        # Make sure our data is in the ROS frame, otherwise throw an error
-        if self.frame != CoordinateFrame.ROS:
-            raise RuntimeError("Convert this IMU Data to a ROS coordinate frame before writing to a ROS2 bag!")
+        # Make sure our data is in the FLU frame, otherwise throw an error
+        if self.frame != CoordinateFrame.FLU:
+            raise RuntimeError("Convert this IMU Data to a FLU coordinate frame before writing to a ROS2 bag!")
 
         # Get ROS2 message classes
         typestore = get_typestore(Stores.ROS2_HUMBLE)

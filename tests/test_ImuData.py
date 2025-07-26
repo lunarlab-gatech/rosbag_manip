@@ -21,7 +21,7 @@ class TestImuData(unittest.TestCase):
 
         # Load the IMU data and save it into a ROS2 bag
         file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'imu.txt').absolute()
-        imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link', CoordinateFrame.ROS)
+        imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link', CoordinateFrame.FLU)
         bag_path = Path(Path('.'), 'tests', 'test_bags', 'test_from_txt_file', 'imu_bag').absolute()
         if os.path.isdir(bag_path):
             os.remove(bag_path / 'imu_bag.db3')
@@ -39,7 +39,7 @@ class TestImuData(unittest.TestCase):
         np.testing.assert_array_equal(ros_data.orientation[87212].astype(np.float128), [0, 0, 0, 1])
         np.testing.assert_equal(ros_data.frame_id, '/Husky1/base_link')
 
-    # def test_to_ROS_frame(self):
+    # def test_to_FLU_frame(self):
     #     """ 
     #     Makes sure that the conversion from NED to ROS functions properly.
     #     """
@@ -49,7 +49,7 @@ class TestImuData(unittest.TestCase):
     #     imu_data = ImuData.from_txt_file(file_path, '/Husky1/base_link', CoordinateFrame.NED)
 
     #     # Convert into a ROS frame
-    #     imu_data.to_ROS_frame()
+    #     imu_data.to_FLU_frame()
 
     #     # Make sure this data matches what we expect
     #     np.testing.assert_equal(float(imu_data.timestamps[87212]), 436.065000)
