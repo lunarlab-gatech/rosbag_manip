@@ -84,7 +84,7 @@ class TestOdometryData(unittest.TestCase):
         """
 
         # Load the Odometry data and convert into the ROS frame
-        file_path = Path(Path('.'), 'tests', 'files', 'test_OdometryData', 'test_from_txt_file_AND_get_ros_msg_AND_from_ros2_bag', 'odom.txt').absolute()
+        file_path = Path(Path('.'), 'tests', 'test_outputs', 'test_from_txt_file', 'odom.txt').absolute()
         odom_data = OdometryData.from_txt_file(file_path, '/Husky1', '/Husky1/base_link', CoordinateFrame.NED)
         odom_data.to_FLU_frame()
 
@@ -92,9 +92,9 @@ class TestOdometryData(unittest.TestCase):
         odom_data.shift_to_start_at_identity()
 
         # Make sure the data matches what we expect
-        np.testing.assert_equal(float(odom_data.timestamps[32]), 690.100000)
-        np.testing.assert_array_almost_equal(odom_data.positions[32].astype(np.float128), [66.16544698000006, -76.15057619688778, 0.25349471896643494], 2)
-        np.testing.assert_array_almost_equal(odom_data.orientations[32].astype(np.float128), [-0.0013123360311483368, -0.0005744812796045746, 0.3999401764357198, 0.9165401262454177], 8)
+        np.testing.assert_equal(float(odom_data.timestamps[13801]), 690.100000)
+        np.testing.assert_array_almost_equal(odom_data.positions[13801].astype(np.float128), [66.16544698000006, -76.15057619688778, 0.25349471896643494], 2)
+        np.testing.assert_array_almost_equal(odom_data.orientations[13801].astype(np.float128), [-0.0013123360311483368, -0.0005744812796045746, 0.3999401764357198, 0.9165401262454177], 8)
         np.testing.assert_equal(odom_data.frame_id, '/Husky1')
         np.testing.assert_equal(odom_data.child_frame_id, '/Husky1/base_link')
         np.testing.assert_equal(odom_data.frame, CoordinateFrame.FLU)
