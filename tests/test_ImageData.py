@@ -62,6 +62,25 @@ class TestImageData(unittest.TestCase):
             or len(rosData.timestamps) == 0 or rosData.frame_id == "":
             self.fail("Test data is not representative of real-time operation!")
 
+    def test_from_npy_files(self):
+        """ Test that we load the data properly from images in individual .npy files. """
+
+        # === Test with 32FC1 Images ===
+        # Load the npy files
+        files_folder = Path(Path('.'), 'tests', 'files', 'test_ImageData', 'test_from_npy_files', '32fc1').absolute()
+        image_data = ImageData.from_npy_files(files_folder, 'Husky1/front_center_DepthPlanar')
+
+        # Make sure it matches what is loaded directly using NumPy
+        np.testing.assert_array_equal(image_data.images[2], np.load(files_folder / '0.150000.npy', 'r'))
+        np.testing.assert_array_equal(image_data.timestamps.astype(np.float128), [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5])
+
+        # Make sure it matches data from using external viewer: https://perchance.org/npy-file-viewer
+        np.testing.assert_equal(image_data.images[2][1][1], 1.0576000e+04)
+        np.testing.assert_equal(image_data.frame_id, 'Husky1/front_center_DepthPlanar')
+        np.testing.assert_equal(image_data.height, 480)
+        np.testing.assert_equal(image_data.width, 752)
+        np.testing.assert_equal(image_data.encoding, ImageData.ImageEncoding._32FC1)
+
     def test_from_image_files(self):
         """
         Test that load the data from image files and saving in the 
@@ -126,5 +145,48 @@ class TestImageData(unittest.TestCase):
         with np.testing.assert_raises(NotImplementedError):
             _ = ImageData.from_image_files(path.absolute(), 'N/A')
 
+    def test_to_npy(self):
+        """ Make sure the data isn't changed after saving to an .npy file. """
+
+        # === Test with RGB8 Images ===
+        # Load the images
+        files_folder = Path(Path('.'), 'tests', 'files', 'test_ImageData', 'test_to_npy', 'images').absolute()
+        image_data = ImageData.from_image_files(files_folder, 'Husky1/front_center_Scene')
+
+        # Save it to an .npy file
+        save_path = Path(Path('.'), 'tests', 'temporary_files', 'test_ImageData', 'test_to_npy', 'npy').absolute()
+        save_path.mkdir(parents=True, exist_ok=True)
+        image_data.to_npy(save_path)
+
+        # Load it back from the .npy file
+        npy_data = ImageData.from_npy(save_path)
+
+        # Ensure the data hasn't changed
+        np.testing.assert_array_almost_equal(image_data.images, npy_data.images, 16)
+        np.testing.assert_array_almost_equal(image_data.timestamps, npy_data.timestamps, 16)
+        np.testing.assert_equal(image_data.frame_id, npy_data.frame_id)
+        np.testing.assert_equal(image_data.height, npy_data.height)
+        np.testing.assert_equal(image_data.width, npy_data.width)
+        np.testing.assert_equal(image_data.encoding, npy_data.encoding)
+
+        # === Test with 32FC1 Images ===
+        # Load the npy files
+        files_folder = Path(Path('.'), 'tests', 'files', 'test_ImageData', 'test_from_npy_files', '32fc1').absolute()
+        image_data = ImageData.from_npy_files(files_folder, 'Husky1/front_center_DepthPlanar')
+
+        # Save to .npy file and reload
+        save_path = Path(Path('.'), 'tests', 'temporary_files', 'test_ImageData', 'test_to_npy', 'npy_depth').absolute()
+        save_path.mkdir(parents=True, exist_ok=True)
+        image_data.to_npy(save_path)
+        npy_data = ImageData.from_npy(save_path)
+
+        # Ensure the data hasn't changed
+        np.testing.assert_array_almost_equal(image_data.images, npy_data.images, 16)
+        np.testing.assert_array_almost_equal(image_data.timestamps, npy_data.timestamps, 16)
+        np.testing.assert_equal(image_data.frame_id, npy_data.frame_id)
+        np.testing.assert_equal(image_data.height, npy_data.height)
+        np.testing.assert_equal(image_data.width, npy_data.width)
+        np.testing.assert_equal(image_data.encoding, npy_data.encoding)
+        
 if __name__ == "__main__":
     unittest.main()

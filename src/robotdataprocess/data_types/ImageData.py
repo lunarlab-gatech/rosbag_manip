@@ -273,10 +273,10 @@ class ImageData(Data):
         # Extract mode and make sure it matches the supported type for this operation
         encoding = ImageData.ImageEncoding.from_dtype_and_channels(first_image.dtype, channels)
         if encoding != ImageData.ImageEncoding._32FC1:
-            raise NotImplementedError(f"Only ImageData.ImageEncoding._32FC1 mode suppported \
-                                      for 'from_npy_files', not {encoding}")
+            raise NotImplementedError(f"Only ImageData.ImageEncoding._32FC1 mode implemented for 'from_npy_files', not {encoding}")
         
         # Load the images as numpy arrays
+        assert channels == 1
         images = np.zeros((len(all_image_files_sorted), height, width), dtype=np.float32)
         pbar = tqdm.tqdm(total=len(all_image_files_sorted), desc="Extracting Images...", unit=" images")
         for i, path in enumerate(all_image_files_sorted):
@@ -291,7 +291,7 @@ class ImageData(Data):
     def from_image_files(cls, image_folder_path: Path | str, frame_id: str):
         """
         Creates a class structure from a folder with .png files, using the file names
-        as the timestamps. This is the format that the HERCULES v1.3 dataset provides
+        as the timestamps. This is the format that the HERCULES v1.4 dataset provides
         for image data.
 
         Args:
@@ -398,15 +398,15 @@ class ImageData(Data):
         output_path.mkdir(parents=True, exist_ok=True)
 
         # Check that the encoding is supported
-        if self.encoding != ImageData.ImageEncoding._32FC1 and self.encoding != ImageData.ImageEncoding.Mono8:
-            raise NotImplementedError(f"Only _32FC1 & Mono8 encoding currently supported for export, not {self.encoding}")
+        if self.encoding != ImageData.ImageEncoding.RGB8 and self.encoding != ImageData.ImageEncoding._32FC1:
+            raise NotImplementedError(f"Only RGB8 & 32FC1 images have been tested for export, not {self.encoding}")
 
         # Get dtype and channels
         dtype, channels = ImageData.ImageEncoding.to_dtype_and_channels(self.encoding)
 
         # Save images into memory-mapped array
-        img_memmap = open_memmap(str(Path(output_folder_path) / "imgs.npy"), dtype=dtype, 
-                                 shape=(self.len(), self.height, self.width), mode='w+')
+        shape = (self.len(), self.height, self.width) if channels == 1 else (self.len(), self.height, self.width, channels)
+        img_memmap = open_memmap(str(Path(output_folder_path) / "imgs.npy"), dtype=dtype, shape=shape, mode='w+')
         pbar = tqdm.tqdm(total=self.len(), desc="Saving Images...", unit=" images")
         for i in range(self.len()):
             img_memmap[i] = self.images[i]

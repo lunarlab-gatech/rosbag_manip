@@ -8,7 +8,41 @@ from robotdataprocess.rosbag.Ros2BagWrapper import Ros2BagWrapper
 import unittest
 
 class TestOdometryData(unittest.TestCase):
-    
+
+    def test_from_csv(self):
+        """ 
+        Test we can load data from csv files, with or without headers 
+        and by specifying which columns have which data.
+        """
+
+        # ===== Test with no Header & extra data in file =====
+        # Load the Odometry Data
+        file_path = Path(Path('.'), 'tests', 'files', 'test_OdometryData', 'test_from_csv', 'vins_result_no_loop.csv').absolute()
+        odom_data = OdometryData.from_csv(file_path, "odom", "base_link", CoordinateFrame.FLU, False, None)
+
+        # Make sure it matches what we expect
+        np.testing.assert_equal(float(odom_data.timestamps[0]), 7.7000000000)
+        np.testing.assert_array_equal(odom_data.positions[0].astype(np.float128), [-0.0038540630,-0.0048488862,1.1692433748])
+        np.testing.assert_array_equal(odom_data.orientations[0].astype(np.float128), [0.9975824644,-0.0002800578,0.0000495580,-0.0694920556])
+
+        np.testing.assert_equal(float(odom_data.timestamps[54]), 10.4000000000)
+        np.testing.assert_array_equal(odom_data.positions[54].astype(np.float128), [-0.0159722930,-1.8196936490,1.4511139975])
+        np.testing.assert_array_equal(odom_data.orientations[54].astype(np.float128), [0.9953149851,-0.0001806001,0.0002772285, 0.0966849053])
+        
+        # ===== Test with header and no extra data =====
+        # Load the Odometery Data
+        file_path = Path(Path('.'), 'tests', 'files', 'test_OdometryData', 'test_from_csv', 'odomGT.csv').absolute()
+        odom_data = OdometryData.from_csv(file_path, "odom", "base_link", CoordinateFrame.FLU, True, None)
+
+        # Make sure it matches what we expect
+        np.testing.assert_equal(float(odom_data.timestamps[0]), 0.050000)
+        np.testing.assert_array_equal(odom_data.positions[0].astype(np.float128), [-0.001950,-0.000122,-1.445321])
+        np.testing.assert_array_almost_equal(odom_data.orientations[0].astype(np.float128), [-0.001957000162432977,-4.400000365204445e-05,0.9999980830008444,4.700000390104748e-05], 16)
+
+        np.testing.assert_equal(float(odom_data.timestamps[688]), 34.450000)
+        np.testing.assert_array_equal(odom_data.positions[688].astype(np.float128), [-3.896535,-1.679678,-1.445265])
+        np.testing.assert_array_almost_equal(odom_data.orientations[688].astype(np.float128), [0.0034349994640731434,0.00016199997472484692,-0.9997928440128326, 0.020060996870093543], 16)
+
     def test_from_txt_file_AND_get_ros_msg_AND_from_ros2_bag(self):
         """
         Test that we can load Odometry data from a txt file 

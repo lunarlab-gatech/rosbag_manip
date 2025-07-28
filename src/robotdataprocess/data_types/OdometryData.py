@@ -108,23 +108,51 @@ class OdometryData(Data):
     
     @classmethod
     @typechecked
-    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame):
+    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame, header_included: bool, column_to_data: list[int] | None):
         """
-        Creates a class structure from a csv file, where the order of values
-        in the files follows ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'].
+        Creates a class structure from a csv file.
 
         Args:
             csv_path (Path | str): Path to the CSV file.
             frame_id (str): The frame that this odometry is relative to.
             child_frame_id (str): The frame whose pose is represented by this odometry.
             frame (CoordinateFrame): The coordinate system convention of this data.
+            header_included (bool): If this csv file has a header, so we can remove it.
+            column_to_data (list[int]): Tells the algorithms which columns in the csv contain which
+                of the following data: ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz']. Thus, 
+                index 0 of column_to_data should be the column that timestamp data is found in the 
+                csv file. Set to None to use [0,1,2,3,4,5,6,7].
         Returns:
             OdometryData: Instance of this class.
         """
 
+        # If column_to_data is None, assume default:
+        if column_to_data is None:
+            column_to_data = [0,1,2,3,4,5,6,7]
+        else:
+            # Check column_to_data values are valid
+            assert np.all(column_to_data >= 0)
+
+        # Determine column names to apply
+        column_names = []
+        desired_data = ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz']
+        i = 0
+        while not np.all([x == -1 for x in column_to_data]):
+            if i in column_to_data: # This column has relevant data
+                index_in_column_to_data = column_to_data.index(i)
+                column_names.append(desired_data[index_in_column_to_data])
+                column_to_data[index_in_column_to_data] = -1
+                
+            else: # This column should be ignored
+                column_names.append("unused_" + str(i))
+
+            # Increase count
+            i += 1
+
         # Read the csv file
-        df1 = pd.read_csv(str(csv_path), header=0, names=['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'])
-        
+        header = 0 if header_included else None
+        df1 = pd.read_csv(str(csv_path), header=header, names=column_names, index_col=False)
+
         # Convert columns to np.ndarray[Decimal]
         timestamps_np = np.array([Decimal(str(ts)) for ts in df1['timestamp']], dtype=object)
         positions_np = np.array([[Decimal(str(x)), Decimal(str(y)), Decimal(str(z))] 
