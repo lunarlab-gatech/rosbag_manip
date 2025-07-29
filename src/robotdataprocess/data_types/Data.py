@@ -7,9 +7,10 @@ import numpy as np
 from typeguard import typechecked
 
 class CoordinateFrame(Enum):
-    ROS = 0 # https://www.ros.org/reps/rep-0103.html - X forward, Y left, Z up := RHS
+    FLU = 0 # https://www.ros.org/reps/rep-0103.html - X forward, Y left, Z up := RHS
     NED = 1 # https://en.wikipedia.org/wiki/Local_tangent_plane_coordinates
             # - X forward (north), Y right (East), Z Down := RHS
+    ENU = 2 # https://www.ros.org/reps/rep-0103.html - X east, Y north, Z up := RHS
 
 class Data:
     """
@@ -31,7 +32,7 @@ class Data:
         # Check to ensure that all timestamps are sequential
         for i in range(len(self.timestamps) - 1):
             if self.timestamps[i] >= self.timestamps[i+1]:
-                raise ValueError("Timestamps do not come in sequential order!")
+                raise ValueError(f"Timestamps {self.timestamps[i]} and {self.timestamps[i+1]} do not come in sequential order!")
             
     def len(self):
         """ Returns the number of items in this data class """

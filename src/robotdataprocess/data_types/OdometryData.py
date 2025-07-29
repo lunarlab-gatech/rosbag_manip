@@ -29,7 +29,7 @@ class OdometryData(Data):
 
     @typechecked
     def __init__(self, frame_id: str, child_frame_id: str, frame: CoordinateFrame, 
-                 timestamps: np.ndarray | list,  positions: np.ndarray | list, 
+                 timestamps: np.ndarray | list, positions: np.ndarray | list, 
                  orientations: np.ndarray | list):
         
         # Copy initial values into attributes
@@ -104,27 +104,55 @@ class OdometryData(Data):
                 pbar.update(1)
 
         # Create an OdometryData class
-        return cls(frame_id, child_frame_id, CoordinateFrame.ROS, timestamps_np, positions_np, orientations_np)
+        return cls(frame_id, child_frame_id, CoordinateFrame.FLU, timestamps_np, positions_np, orientations_np)
     
     @classmethod
     @typechecked
-    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame):
+    def from_csv(cls, csv_path: Path | str, frame_id: str, child_frame_id: str, frame: CoordinateFrame, header_included: bool, column_to_data: list[int] | None):
         """
-        Creates a class structure from a csv file, where the order of values
-        in the files follows ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'].
+        Creates a class structure from a csv file.
 
         Args:
             csv_path (Path | str): Path to the CSV file.
             frame_id (str): The frame that this odometry is relative to.
             child_frame_id (str): The frame whose pose is represented by this odometry.
             frame (CoordinateFrame): The coordinate system convention of this data.
+            header_included (bool): If this csv file has a header, so we can remove it.
+            column_to_data (list[int]): Tells the algorithms which columns in the csv contain which
+                of the following data: ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz']. Thus, 
+                index 0 of column_to_data should be the column that timestamp data is found in the 
+                csv file. Set to None to use [0,1,2,3,4,5,6,7].
         Returns:
             OdometryData: Instance of this class.
         """
 
+        # If column_to_data is None, assume default:
+        if column_to_data is None:
+            column_to_data = [0,1,2,3,4,5,6,7]
+        else:
+            # Check column_to_data values are valid
+            assert np.all(column_to_data >= 0)
+
+        # Determine column names to apply
+        column_names = []
+        desired_data = ['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz']
+        i = 0
+        while not np.all([x == -1 for x in column_to_data]):
+            if i in column_to_data: # This column has relevant data
+                index_in_column_to_data = column_to_data.index(i)
+                column_names.append(desired_data[index_in_column_to_data])
+                column_to_data[index_in_column_to_data] = -1
+                
+            else: # This column should be ignored
+                column_names.append("unused_" + str(i))
+
+            # Increase count
+            i += 1
+
         # Read the csv file
-        df1 = pd.read_csv(str(csv_path), header=0, names=['timestamp', 'x', 'y', 'z', 'qw', 'qx', 'qy', 'qz'])
-        
+        header = 0 if header_included else None
+        df1 = pd.read_csv(str(csv_path), header=header, names=column_names, index_col=False)
+
         # Convert columns to np.ndarray[Decimal]
         timestamps_np = np.array([Decimal(str(ts)) for ts in df1['timestamp']], dtype=object)
         positions_np = np.array([[Decimal(str(x)), Decimal(str(y)), Decimal(str(z))] 
@@ -376,10 +404,10 @@ class OdometryData(Data):
     # =========================================================================
     # =========================== Frame Conversions =========================== 
     # ========================================================================= 
-    def to_ROS_frame(self):
-        # If we are already in the ROS frame, return
-        if self.frame == CoordinateFrame.ROS:
-            print("Data already in ROS coordinate frame, returning...")
+    def to_FLU_frame(self):
+        # If we are already in the FLU frame, return
+        if self.frame == CoordinateFrame.FLU:
+            print("Data already in FLU coordinate frame, returning...")
             return
 
         # If in NED, run the conversion
@@ -396,7 +424,7 @@ class OdometryData(Data):
                 self.orientations[i] = (R_NED_Q * R.from_quat(self.orientations[i]) * R_NED_Q.inv()).as_quat()
 
             # Update frame
-            self.frame = CoordinateFrame.ROS
+            self.frame = CoordinateFrame.FLU
 
         # Otherwise, throw an error
         else:
@@ -466,9 +494,9 @@ class OdometryData(Data):
         # Calculate the Stamped Poses
         self.calculate_stamped_poses()
 
-        # Make sure our data is in the ROS frame, otherwise throw an error
-        if self.frame != CoordinateFrame.ROS:
-            raise RuntimeError("Convert this Odometry Data to a ROS frame before writing to a ROS2 bag!")
+        # Make sure our data is in the FLU frame, otherwise throw an error
+        if self.frame != CoordinateFrame.FLU:
+            raise RuntimeError("Convert this Odometry Data to a FLU frame before writing to a ROS2 bag!")
 
         # Check to make sure index is within data bounds
         if i < 0 or i >= self.len():
