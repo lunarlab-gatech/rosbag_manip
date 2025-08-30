@@ -5,10 +5,10 @@ def main():
     robot_name = "Drone2"
 
     # Extract RGB and IMU from Hercules v1.3
-    imu_data = ImuData.from_txt_file('/media/dbutterfield3/T73/Hercules_datasets/V1.4/test2_2uav2ugv_calib_752x480/' + robot_name + '/synthetic_imu.txt', 
+    imu_data = ImuData.from_txt_file('/media/dbutterfield3/T73/Hercules_datasets/V1.4.1/data/' + robot_name + '/synthetic_imu.txt', 
                                      '' + robot_name + '/base_link', CoordinateFrame.NED)
-    odom_data = OdometryData.from_txt_file('/media/dbutterfield3/T73/Hercules_datasets/V1.4/test2_2uav2ugv_calib_752x480/' + robot_name + '/odom.txt', 'world', 'body', CoordinateFrame.NED)
-    image_data = ImageData.from_image_files('/media/dbutterfield3/T73/Hercules_datasets/V1.4/test2_2uav2ugv_calib_752x480/' + robot_name + '/rgb', '' + robot_name + '/front_center_Scene')
+    odom_data = OdometryData.from_txt_file('/media/dbutterfield3/T73/Hercules_datasets/V1.4.1/data/' + robot_name + '/odom.txt', 'world', 'body', CoordinateFrame.NED)
+    image_data = ImageData.from_image_files('/media/dbutterfield3/T73/Hercules_datasets/V1.4.1/data/' + robot_name + '/rgb', '' + robot_name + '/front_center_Scene')
 
     # Convert data from NED frame to ROS frame (and make sure it is at the identity)
     odom_data.to_FLU_frame()
@@ -18,7 +18,7 @@ def main():
     imu_data.frame = CoordinateFrame.FLU # This lets us write it into a ROS bag without an error, without actually changing data
 
     # Save it into a ROS2 Humble bag
-    Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T73/Hercules_datasets/V1.4/extract/bags_for_vins_mono/' + robot_name,
+    Ros2BagWrapper.write_data_to_rosbag('/media/dbutterfield3/T73/Hercules_datasets/V1.4.1/extract/bags_for_vins_mono/' + robot_name,
              [imu_data, image_data,  odom_data,       odom_data], 
              [  '/imu',    '/cam0', '/odom_gt', '/odom_gt/path'], 
              [    None,       None, "Odometry",          "Path"], 
